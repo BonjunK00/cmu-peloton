@@ -275,6 +275,37 @@ class TileGroupHeader : public Printable {
   // Get a string representation for debugging
   const std::string GetInfo() const;
 
+  // Setter for version index entry
+  void SetVersionIndexEntry(oid_t tuple_id, const ItemPointer &item) {
+    tile_header_lock.Lock();
+    LOG_TRACE("SetVersionIndexEntry for TUPLE_ID %u, ItemPointer: %u, %u", tuple_id, item.block, item.offset);
+    version_index_[tuple_id] = item;
+    tile_header_lock.Unlock();
+  }
+
+  // Getter for version index entry
+  ItemPointer GetVersionIndexEntry(oid_t tuple_id) {
+    tile_header_lock.Lock();
+    auto it = version_index_.find(tuple_id);
+    ItemPointer result = (it != version_index_.end()) ? it->second : ItemPointer();
+    tile_header_lock.Unlock();
+    LOG_TRACE("GetVersionIndexEntry for TUPLE_ID %u, found: %d", tuple_id, !result.IsNull());
+    return result;
+  }
+
+  // Deleter for version index entry
+  void DeleteVersionIndexEntry(oid_t tuple_id) {
+    tile_header_lock.Lock();
+    auto it = version_index_.find(tuple_id);
+    if (it != version_index_.end()) {
+      LOG_TRACE("DeleteVersionIndexEntry for TUPLE_ID %u", tuple_id);
+      version_index_.erase(it);
+    } else {
+      LOG_TRACE("Attempted to delete non-existing entry for TUPLE_ID %u", tuple_id);
+    }
+    tile_header_lock.Unlock();
+  }
+
  private:
   //===--------------------------------------------------------------------===//
   // Data members
@@ -287,6 +318,8 @@ class TileGroupHeader : public Printable {
   TileGroup *tile_group;
 
   std::unique_ptr<TupleHeader[]> tuple_headers_;
+
+  std::unordered_map<oid_t, ItemPointer> version_index_;
 
   // number of tuple slots allocated
   oid_t num_tuple_slots;

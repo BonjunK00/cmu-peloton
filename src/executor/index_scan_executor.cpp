@@ -223,6 +223,18 @@ bool IndexScanExecutor::ExecPrimaryIndexLookup() {
 #ifdef LOG_TRACE_ENABLED
     num_tuples_examined++;
 #endif
+    ItemPointer versioned_location = tile_group_header->GetVersionIndexEntry(tuple_location.offset);
+    if (!versioned_location.IsNull()) {
+      visible_tuple_locations.push_back(versioned_location);
+      auto res = transaction_manager.PerformRead(current_txn, versioned_location, tile_group_header, acquire_owner);
+      if (!res) {
+        transaction_manager.SetTransactionResult(current_txn, ResultType::FAILURE);
+        return res;
+      }
+      LOG_TRACE("Version index hit for TUPLE_ID %u", tuple_location.offset);
+      continue;
+    }
+
     // the following code traverses the version chain until a certain visible
     // version is found.
     // we should always find a visible version from a version chain.
@@ -471,6 +483,17 @@ bool IndexScanExecutor::ExecSecondaryIndexLookup() {
       num_blocks_reused++;
     num_tuples_examined++;
 #endif
+    ItemPointer versioned_location = tile_group_header->GetVersionIndexEntry(tuple_location.offset);
+    if (!versioned_location.IsNull()) {
+      visible_tuple_locations.push_back(versioned_location);
+      auto res = transaction_manager.PerformRead(current_txn, versioned_location, tile_group_header, acquire_owner);
+      if (!res) {
+        transaction_manager.SetTransactionResult(current_txn, ResultType::FAILURE);
+        return res;
+      }
+      LOG_TRACE("Version index hit for TUPLE_ID %u", tuple_location.offset);
+      continue;
+    }
 
     // the following code traverses the version chain until a certain visible
     // version is found.

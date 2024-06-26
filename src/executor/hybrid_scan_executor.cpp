@@ -211,6 +211,22 @@ bool HybridScanExecutor::SeqScanUtil() {
         }
       }
 
+      ItemPointer versioned_location = tile_group_header->GetVersionIndexEntry(tuple_id);
+      if (!versioned_location.IsNull()) {
+        position_list.push_back(versioned_location.offset);
+        auto res = transaction_manager.PerformRead(current_txn,
+                                                   versioned_location,
+                                                   tile_group_header,
+                                                   acquire_owner);
+        if (!res) {
+          transaction_manager.SetTransactionResult(current_txn,
+                                                   ResultType::FAILURE);
+          return res;
+        }
+        LOG_TRACE("Version index hit for Tuple ID %u", tuple_id);
+        continue;
+      }
+
       // Check transaction visibility
       if (transaction_manager.IsVisible(current_txn, tile_group_header,
                                         tuple_id) == VisibilityType::OK) {
@@ -381,6 +397,22 @@ bool HybridScanExecutor::ExecPrimaryIndexLookup() {
     auto storage_manager = storage::StorageManager::GetInstance();
     auto tile_group = storage_manager->GetTileGroup(tuple_location.block);
     auto tile_group_header = tile_group.get()->GetHeader();
+
+    ItemPointer versioned_location = tile_group_header->GetVersionIndexEntry(tuple_location.offset);
+    if (!versioned_location.IsNull()) {
+      visible_tuples[versioned_location.block].push_back(versioned_location.offset);
+      auto res = transaction_manager.PerformRead(current_txn,
+                                                versioned_location,
+                                                tile_group_header,
+                                                acquire_owner);
+      if (!res) {
+        transaction_manager.SetTransactionResult(current_txn,
+                                                 ResultType::FAILURE);
+        return res;
+      }
+      LOG_TRACE("Version index hit for Tuple ID %u", tuple_location.offset);
+      continue;
+    }
 
     // perform transaction read
     size_t chain_length = 0;

@@ -368,6 +368,8 @@ void TimestampOrderingTransactionManager::PerformInsert(
 
   // Write down the head pointer's address in tile group header
   tile_group_header->SetIndirection(tuple_id, index_entry_ptr);
+
+  tile_group_header->SetVersionIndexEntry(tuple_id, location);
 }
 
 void TimestampOrderingTransactionManager::PerformUpdate(
@@ -444,6 +446,8 @@ void TimestampOrderingTransactionManager::PerformUpdate(
 
   // Add the old tuple into the update set
   current_txn->RecordUpdate(old_location);
+
+  new_tile_group_header->SetVersionIndexEntry(new_location.offset, new_location);
 }
 
 void TimestampOrderingTransactionManager::PerformUpdate(
@@ -550,6 +554,8 @@ void TimestampOrderingTransactionManager::PerformDelete(
   }
 
   current_txn->RecordDelete(old_location);
+
+  new_tile_group_header->SetVersionIndexEntry(new_location.offset, new_location);
 }
 
 void TimestampOrderingTransactionManager::PerformDelete(
