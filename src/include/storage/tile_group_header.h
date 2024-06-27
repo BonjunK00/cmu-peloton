@@ -278,7 +278,8 @@ class TileGroupHeader : public Printable {
   // Setter for version index entry
   void SetVersionIndexEntry(oid_t tuple_id, const ItemPointer &item) {
     version_index_lock.Lock();
-    LOG_TRACE("SetVersionIndexEntry for TUPLE_ID %u, ItemPointer: %u, %u", tuple_id, item.block, item.offset);
+    LOG_TRACE("SetVersionIndexEntry for TUPLE_ID %u, ItemPointer: %u, %u",
+               tuple_id, item.block, item.offset);
     version_index_[tuple_id] = item;
     version_index_lock.Unlock();
   }
@@ -289,7 +290,8 @@ class TileGroupHeader : public Printable {
     auto it = version_index_.find(tuple_id);
     ItemPointer result = (it != version_index_.end()) ? it->second : ItemPointer();
     version_index_lock.Unlock();
-    LOG_TRACE("GetVersionIndexEntry for TUPLE_ID %u, found: %d", tuple_id, !result.IsNull());
+    LOG_TRACE("GetVersionIndexEntry for TUPLE_ID %u, found: %d, version_index_size: %lu", 
+              tuple_id, !result.IsNull(), version_index_.size());
     return result;
   }
 
