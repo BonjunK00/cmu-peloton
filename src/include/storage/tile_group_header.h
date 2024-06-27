@@ -277,25 +277,25 @@ class TileGroupHeader : public Printable {
 
   // Setter for version index entry
   void SetVersionIndexEntry(oid_t tuple_id, const ItemPointer &item) {
-    tile_header_lock.Lock();
+    version_index_lock.Lock();
     LOG_TRACE("SetVersionIndexEntry for TUPLE_ID %u, ItemPointer: %u, %u", tuple_id, item.block, item.offset);
     version_index_[tuple_id] = item;
-    tile_header_lock.Unlock();
+    version_index_lock.Unlock();
   }
 
   // Getter for version index entry
   ItemPointer GetVersionIndexEntry(oid_t tuple_id) {
-    tile_header_lock.Lock();
+    version_index_lock.Lock();
     auto it = version_index_.find(tuple_id);
     ItemPointer result = (it != version_index_.end()) ? it->second : ItemPointer();
-    tile_header_lock.Unlock();
+    version_index_lock.Unlock();
     LOG_TRACE("GetVersionIndexEntry for TUPLE_ID %u, found: %d", tuple_id, !result.IsNull());
     return result;
   }
 
   // Deleter for version index entry
   void DeleteVersionIndexEntry(oid_t tuple_id) {
-    tile_header_lock.Lock();
+    version_index_lock.Lock();
     auto it = version_index_.find(tuple_id);
     if (it != version_index_.end()) {
       LOG_TRACE("DeleteVersionIndexEntry for TUPLE_ID %u", tuple_id);
@@ -303,7 +303,7 @@ class TileGroupHeader : public Printable {
     } else {
       LOG_TRACE("Attempted to delete non-existing entry for TUPLE_ID %u", tuple_id);
     }
-    tile_header_lock.Unlock();
+    version_index_lock.Unlock();
   }
 
  private:
@@ -330,6 +330,8 @@ class TileGroupHeader : public Printable {
   std::atomic<oid_t> next_tuple_slot;
 
   common::synchronization::SpinLatch tile_header_lock;
+
+  common::synchronization::SpinLatch version_index_lock;
 
   // Immmutable Flag. Should be set by the indextuner to be true.
   // By default it will be set to false.
