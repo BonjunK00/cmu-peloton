@@ -3,9 +3,6 @@ SYSBENCH_OPTS="--db-driver=pgsql --pgsql-host=localhost --pgsql-port=15721 --pgs
 RUN_TIME=60
 THREADS=4
 
-echo "Preparing sysbench test..."
-sysbench $SYSBENCH_TEST $SYSBENCH_OPTS prepare
-
 echo "Running sysbench test..."
 sysbench $SYSBENCH_TEST $SYSBENCH_OPTS --time=$RUN_TIME --threads=$THREADS run
 
