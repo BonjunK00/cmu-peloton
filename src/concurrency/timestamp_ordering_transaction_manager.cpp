@@ -23,6 +23,7 @@
 #include "gc/gc_manager_factory.h"
 #include "logging/log_manager_factory.h"
 #include "settings/settings_manager.h"
+#include "concurrency/version_index_manager.h"
 
 namespace peloton {
 namespace concurrency {
@@ -369,7 +370,8 @@ void TimestampOrderingTransactionManager::PerformInsert(
   // Write down the head pointer's address in tile group header
   tile_group_header->SetIndirection(tuple_id, index_entry_ptr);
 
-  tile_group_header->SetVersionIndexEntry(tuple_id, location);
+  auto version_index_manager = VersionIndexManager::GetInstance();
+  version_index_manager->AddVersionEntry(index_entry_ptr, ItemPointer(), location);
 }
 
 void TimestampOrderingTransactionManager::PerformUpdate(
@@ -447,7 +449,8 @@ void TimestampOrderingTransactionManager::PerformUpdate(
   // Add the old tuple into the update set
   current_txn->RecordUpdate(old_location);
 
-  new_tile_group_header->SetVersionIndexEntry(new_location.offset, new_location);
+  auto version_index_manager = VersionIndexManager::GetInstance();
+  version_index_manager->AddVersionEntry(index_entry_ptr, old_location, new_location);
 }
 
 void TimestampOrderingTransactionManager::PerformUpdate(
@@ -555,7 +558,8 @@ void TimestampOrderingTransactionManager::PerformDelete(
 
   current_txn->RecordDelete(old_location);
 
-  new_tile_group_header->SetVersionIndexEntry(new_location.offset, new_location);
+  auto version_index_manager = VersionIndexManager::GetInstance();
+  version_index_manager->AddVersionEntry(index_entry_ptr, old_location, new_location);
 }
 
 void TimestampOrderingTransactionManager::PerformDelete(

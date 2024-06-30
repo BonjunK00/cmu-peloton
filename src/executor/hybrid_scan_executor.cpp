@@ -16,6 +16,7 @@
 #include "common/internal_types.h"
 #include "common/logger.h"
 #include "concurrency/transaction_manager_factory.h"
+#include "concurrency/version_index_manager.h"
 #include "executor/executor_context.h"
 #include "executor/logical_tile.h"
 #include "executor/logical_tile_factory.h"
@@ -211,22 +212,6 @@ bool HybridScanExecutor::SeqScanUtil() {
         }
       }
 
-      ItemPointer versioned_location = tile_group_header->GetVersionIndexEntry(tuple_id);
-      if (!versioned_location.IsNull()) {
-        position_list.push_back(versioned_location.offset);
-        auto res = transaction_manager.PerformRead(current_txn,
-                                                   versioned_location,
-                                                   tile_group_header,
-                                                   acquire_owner);
-        if (!res) {
-          transaction_manager.SetTransactionResult(current_txn,
-                                                   ResultType::FAILURE);
-          return res;
-        }
-        LOG_TRACE("Version index hit for Tuple ID %u", tuple_id);
-        continue;
-      }
-
       // Check transaction visibility
       if (transaction_manager.IsVisible(current_txn, tile_group_header,
                                         tuple_id) == VisibilityType::OK) {
@@ -398,19 +383,17 @@ bool HybridScanExecutor::ExecPrimaryIndexLookup() {
     auto tile_group = storage_manager->GetTileGroup(tuple_location.block);
     auto tile_group_header = tile_group.get()->GetHeader();
 
-    ItemPointer versioned_location = tile_group_header->GetVersionIndexEntry(tuple_location.offset);
+    auto indirection_ptr = tile_group_header->GetIndirection(tuple_location.offset);
+    auto version_index_manager = concurrency::VersionIndexManager::GetInstance();
+    ItemPointer versioned_location = version_index_manager->GetVisibleVersion(indirection_ptr, current_txn);
     if (!versioned_location.IsNull()) {
       visible_tuples[versioned_location.block].push_back(versioned_location.offset);
-      auto res = transaction_manager.PerformRead(current_txn,
-                                                versioned_location,
-                                                tile_group_header,
-                                                acquire_owner);
+      auto res = transaction_manager.PerformRead(current_txn, versioned_location, tile_group_header, acquire_owner);
       if (!res) {
-        transaction_manager.SetTransactionResult(current_txn,
-                                                 ResultType::FAILURE);
+        transaction_manager.SetTransactionResult(current_txn, ResultType::FAILURE);
         return res;
       }
-      LOG_TRACE("Version index hit for Tuple ID %u", tuple_location.offset);
+      LOG_TRACE("Version index hit for TUPLE_ID %u", versioned_location.offset);
       continue;
     }
 
