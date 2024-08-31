@@ -23,6 +23,7 @@
 #include "common/thread_pool.h"
 #include "concurrency/transaction_context.h"
 #include "gc/gc_manager.h"
+#include "gc/epoch_tree_node.h"
 #include "common/internal_types.h"
 
 #include "common/container/lock_free_queue.h"
@@ -129,6 +130,12 @@ class TransactionLevelGCManager : public GCManager {
 
   int Reclaim(const int &thread_id, const eid_t &expired_eid);
 
+  void InsertEpochNode(eid_t eid);
+  EpochTreeLeafNode* FindEpochNode(eid_t eid);
+  void DeleteEpochNode(eid_t eid);
+  void BindTransaction(eid_t eid, txn_id_t txn_id);
+  void UnbindTransaction(eid_t eid, txn_id_t txn_id);
+
  private:
   inline unsigned int HashToThread(const size_t &thread_id) {
     return (unsigned int)thread_id % gc_thread_count_;
@@ -173,6 +180,9 @@ class TransactionLevelGCManager : public GCManager {
   // # local_unlink_queues == # gc_threads
   std::vector<
       std::list<concurrency::TransactionContext* >> local_unlink_queues_;
+
+  // new unlink_tree
+  std::shared_ptr<EpochTreeInternalNode> unlink_tree;
 
   // multimaps for to-be-reclaimed tuples.
   // The key is the timestamp when the garbage is identified, value is the

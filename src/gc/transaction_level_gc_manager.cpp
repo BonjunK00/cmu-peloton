@@ -406,5 +406,46 @@ void TransactionLevelGCManager::UnlinkVersion(const ItemPointer location,
   }
 }
 
+void TransactionLevelGCManager::InsertEpochNode(eid_t eid) {
+    std::shared_ptr<EpochTreeLeafNode> newNode = std::make_shared<EpochTreeLeafNode>(eid);
+    if (!unlink_tree) {
+        unlink_tree = std::make_shared<EpochTreeInternalNode>(eid);
+        unlink_tree->left = newNode;
+    } else {
+        unlink_tree->InsertLeafNode(newNode);
+    }
+}
+
+
+EpochTreeLeafNode* TransactionLevelGCManager::FindEpochNode(eid_t eid) {
+  return unlink_tree ? unlink_tree->FindLeafNode(eid) : nullptr;
+}
+
+void TransactionLevelGCManager::DeleteEpochNode(eid_t eid) {
+  if (unlink_tree) {
+      unlink_tree->DeleteLeafNode(eid);
+  }
+}
+
+void TransactionLevelGCManager::BindTransaction(eid_t eid, txn_id_t txn_id) {
+  EpochTreeLeafNode* node = FindEpochNode(eid);
+  if (node) {
+      node->transactions.push_back(txn_id);
+      node->IncrementRefCount();
+  }
+}
+
+void TransactionLevelGCManager::UnbindTransaction(eid_t eid, txn_id_t txn_id) {
+  EpochTreeLeafNode* node = FindEpochNode(eid);
+  if (node) {
+      auto& transactions = node->transactions;
+      transactions.erase(std::remove(transactions.begin(), transactions.end(), txn_id), transactions.end());
+      node->DecrementRefCount();
+      if (node->IsGarbage()) {
+          DeleteEpochNode(eid);
+      }
+  }
+}
+
 }  // namespace gc
 }  // namespace peloton
