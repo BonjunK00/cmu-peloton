@@ -155,6 +155,9 @@ bool TimestampOrderingTransactionManager::PerformRead(TransactionContext *const 
                                                       bool acquire_ownership) {
   ItemPointer location = read_location;
 
+  auto& transaction_level_gc_manager = gc::TransactionLevelGCManager::GetInstance();
+  transaction_level_gc_manager.BindTransaction(current_txn->GetEpochId(), current_txn->GetTransactionId());
+
   //////////////////////////////////////////////////////////
   //// handle READ_ONLY
   //////////////////////////////////////////////////////////
@@ -372,6 +375,10 @@ void TimestampOrderingTransactionManager::PerformInsert(
 
   auto version_index_manager = VersionIndexManager::GetInstance();
   version_index_manager->AddVersionEntry(index_entry_ptr, ItemPointer(), location);
+
+  auto& transaction_level_gc_manager = gc::TransactionLevelGCManager::GetInstance();
+  transaction_level_gc_manager.InsertEpochNode(current_txn->GetEpochId());
+  transaction_level_gc_manager.BindTransaction(current_txn->GetEpochId(), current_txn->GetTransactionId());
 }
 
 void TimestampOrderingTransactionManager::PerformUpdate(
@@ -451,6 +458,10 @@ void TimestampOrderingTransactionManager::PerformUpdate(
 
   auto version_index_manager = VersionIndexManager::GetInstance();
   version_index_manager->AddVersionEntry(index_entry_ptr, old_location, new_location);
+
+  auto& transaction_level_gc_manager = gc::TransactionLevelGCManager::GetInstance();
+  transaction_level_gc_manager.InsertEpochNode(current_txn->GetEpochId());
+  transaction_level_gc_manager.BindTransaction(current_txn->GetEpochId(), current_txn->GetTransactionId());
 }
 
 void TimestampOrderingTransactionManager::PerformUpdate(
@@ -560,6 +571,10 @@ void TimestampOrderingTransactionManager::PerformDelete(
 
   auto version_index_manager = VersionIndexManager::GetInstance();
   version_index_manager->AddVersionEntry(index_entry_ptr, old_location, new_location);
+
+  auto& transaction_level_gc_manager = gc::TransactionLevelGCManager::GetInstance();
+  transaction_level_gc_manager.InsertEpochNode(current_txn->GetEpochId());
+  transaction_level_gc_manager.BindTransaction(current_txn->GetEpochId(), current_txn->GetTransactionId());
 }
 
 void TimestampOrderingTransactionManager::PerformDelete(
@@ -761,6 +776,9 @@ ResultType TimestampOrderingTransactionManager::CommitTransaction(
   ResultType result = current_txn->GetResult();
 
   log_manager.LogEnd();
+
+  auto& transaction_level_gc_manager = gc::TransactionLevelGCManager::GetInstance();
+  transaction_level_gc_manager.UnbindTransaction(current_txn->GetEpochId(), current_txn->GetTransactionId());
 
   EndTransaction(current_txn);
 
