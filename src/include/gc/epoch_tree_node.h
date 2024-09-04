@@ -20,7 +20,7 @@ public:
 
     int ref_count;
     eid_t epoch;
-    std::vector<txn_id_t> transactions;
+    std::vector<concurrency::TransactionContext*> transactions;
 
     EpochTreeLeafNode(int epoch) : ref_count(0), epoch(epoch) {}
 

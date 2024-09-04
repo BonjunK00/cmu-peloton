@@ -133,8 +133,8 @@ class TransactionLevelGCManager : public GCManager {
   void InsertEpochNode(eid_t eid);
   EpochTreeLeafNode* FindEpochNode(eid_t eid);
   void DeleteEpochNode(eid_t eid);
-  void BindTransaction(eid_t eid, txn_id_t txn_id);
-  void UnbindTransaction(eid_t eid, txn_id_t txn_id);
+  void BindTransaction(eid_t eid, concurrency::TransactionContext* txn_ctx);
+  void UnbindTransaction(eid_t eid);
 
  private:
   inline unsigned int HashToThread(const size_t &thread_id) {

@@ -427,19 +427,17 @@ void TransactionLevelGCManager::DeleteEpochNode(eid_t eid) {
   }
 }
 
-void TransactionLevelGCManager::BindTransaction(eid_t eid, txn_id_t txn_id) {
+void TransactionLevelGCManager::BindTransaction(eid_t eid, concurrency::TransactionContext* txn_ctx) {
   EpochTreeLeafNode* node = FindEpochNode(eid);
   if (node) {
-      node->transactions.push_back(txn_id);
+      node->transactions.push_back(txn_ctx);
       node->IncrementRefCount();
   }
 }
 
-void TransactionLevelGCManager::UnbindTransaction(eid_t eid, txn_id_t txn_id) {
+void TransactionLevelGCManager::UnbindTransaction(eid_t eid) {
   EpochTreeLeafNode* node = FindEpochNode(eid);
   if (node) {
-      auto& transactions = node->transactions;
-      transactions.erase(std::remove(transactions.begin(), transactions.end(), txn_id), transactions.end());
       node->DecrementRefCount();
       if (node->IsGarbage()) {
           DeleteEpochNode(eid);
