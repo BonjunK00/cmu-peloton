@@ -4,6 +4,7 @@
 #include <vector>
 
 #include "common/internal_types.h"
+#include "concurrency/transaction_context.h"
 
 namespace peloton {
 namespace gc {
@@ -20,7 +21,7 @@ public:
 
   int ref_count;
   eid_t epoch;
-  std::vector<concurrency::TransactionContext*> transactions;
+  std::vector<concurrency::TransactionContext* > transactions;
 
   EpochTreeLeafNode(int epoch) : ref_count(0), epoch(epoch) {}
 
