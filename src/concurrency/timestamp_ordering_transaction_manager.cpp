@@ -377,8 +377,7 @@ void TimestampOrderingTransactionManager::PerformInsert(
   version_index_manager->AddVersionEntry(index_entry_ptr, ItemPointer(), location);
 
   auto& transaction_level_gc_manager = gc::TransactionLevelGCManager::GetInstance();
-  transaction_level_gc_manager.InsertEpochNode(current_txn->GetEpochId());
-  transaction_level_gc_manager.BindTransaction(current_txn->GetEpochId(), current_txn);
+  transaction_level_gc_manager.InsertEpochNode(current_txn->GetEpochId(), current_txn);
 }
 
 void TimestampOrderingTransactionManager::PerformUpdate(
@@ -460,8 +459,7 @@ void TimestampOrderingTransactionManager::PerformUpdate(
   version_index_manager->AddVersionEntry(index_entry_ptr, old_location, new_location);
 
   auto& transaction_level_gc_manager = gc::TransactionLevelGCManager::GetInstance();
-  transaction_level_gc_manager.InsertEpochNode(current_txn->GetEpochId());
-  transaction_level_gc_manager.BindTransaction(current_txn->GetEpochId(), current_txn);
+  transaction_level_gc_manager.InsertEpochNode(current_txn->GetEpochId(), current_txn);
 }
 
 void TimestampOrderingTransactionManager::PerformUpdate(
@@ -573,8 +571,7 @@ void TimestampOrderingTransactionManager::PerformDelete(
   version_index_manager->AddVersionEntry(index_entry_ptr, old_location, new_location);
 
   auto& transaction_level_gc_manager = gc::TransactionLevelGCManager::GetInstance();
-  transaction_level_gc_manager.InsertEpochNode(current_txn->GetEpochId());
-  transaction_level_gc_manager.BindTransaction(current_txn->GetEpochId(), current_txn);
+  transaction_level_gc_manager.InsertEpochNode(current_txn->GetEpochId(), current_txn);
 }
 
 void TimestampOrderingTransactionManager::PerformDelete(

@@ -407,15 +407,46 @@ void TransactionLevelGCManager::UnlinkVersion(const ItemPointer location,
 }
 
 void TransactionLevelGCManager::InsertEpochNode(eid_t eid) {
+  EpochTreeLeafNode* exist_node = FindEpochNode(eid);
+  if(exist_node) return;
+
+  std::shared_ptr<EpochTreeLeafNode> newNode = std::make_shared<EpochTreeLeafNode>(eid);
+  if (!unlink_tree) {
+      unlink_tree = std::make_shared<EpochTreeInternalNode>(eid);
+      unlink_tree->left = newNode;
+  } else {
+      unlink_tree->InsertLeafNode(newNode);
+  }
+}
+
+void TransactionLevelGCManager::InsertEpochNode(eid_t eid, concurrency::TransactionContext* txn_ctx) {
+  EpochTreeLeafNode* exist_node = FindEpochNode(eid);
+  if(exist_node) {
+    bool already_bound = false;
+    for (auto* txn : exist_node->transactions) {
+        if (txn == txn_ctx) {
+            already_bound = true;
+            break;
+        }
+    }
+    if (already_bound) return;
+
+    exist_node->transactions.push_back(txn_ctx);
+    exist_node->IncrementRefCount();
+  } else {
     std::shared_ptr<EpochTreeLeafNode> newNode = std::make_shared<EpochTreeLeafNode>(eid);
+    newNode->transactions.push_back(txn_ctx);
+    newNode->IncrementRefCount();
     if (!unlink_tree) {
         unlink_tree = std::make_shared<EpochTreeInternalNode>(eid);
         unlink_tree->left = newNode;
     } else {
         unlink_tree->InsertLeafNode(newNode);
     }
-}
+  }
 
+
+}
 
 EpochTreeLeafNode* TransactionLevelGCManager::FindEpochNode(eid_t eid) {
   return unlink_tree ? unlink_tree->FindLeafNode(eid) : nullptr;
@@ -429,19 +460,25 @@ void TransactionLevelGCManager::DeleteEpochNode(eid_t eid) {
 
 void TransactionLevelGCManager::BindTransaction(eid_t eid, concurrency::TransactionContext* txn_ctx) {
   EpochTreeLeafNode* node = FindEpochNode(eid);
-  if (node) {
-      node->transactions.push_back(txn_ctx);
-      node->IncrementRefCount();
+  if(!node) return;
+
+  bool already_bound = false;
+  for (auto* txn : node->transactions) {
+      if (txn == txn_ctx) {
+          already_bound = true;
+          break;
+      }
   }
+  if (already_bound) return;
+
+  node->transactions.push_back(txn_ctx);
+  node->IncrementRefCount();
 }
 
 void TransactionLevelGCManager::UnbindTransaction(eid_t eid) {
   EpochTreeLeafNode* node = FindEpochNode(eid);
   if (node) {
       node->DecrementRefCount();
-      if (node->IsGarbage()) {
-          DeleteEpochNode(eid);
-      }
   }
 }
 

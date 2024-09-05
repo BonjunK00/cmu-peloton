@@ -131,6 +131,7 @@ class TransactionLevelGCManager : public GCManager {
   int Reclaim(const int &thread_id, const eid_t &expired_eid);
 
   void InsertEpochNode(eid_t eid);
+  void InsertEpochNode(eid_t eid, concurrency::TransactionContext* txn_ctx);
   EpochTreeLeafNode* FindEpochNode(eid_t eid);
   void DeleteEpochNode(eid_t eid);
   void BindTransaction(eid_t eid, concurrency::TransactionContext* txn_ctx);
