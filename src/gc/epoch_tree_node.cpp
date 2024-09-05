@@ -4,39 +4,105 @@ namespace peloton {
 namespace gc {
 
 EpochTreeLeafNode* EpochTreeInternalNode::FindLeafNode(eid_t epoch) {
-    if (IsLeaf()) return nullptr;
-    if (epoch == this->epoch && left && left->IsLeaf()) return static_cast<EpochTreeLeafNode*>(left.get());
-    if (epoch < this->epoch && left) return static_cast<EpochTreeInternalNode*>(left.get())->FindLeafNode(epoch);
-    if (epoch > this->epoch && right) return static_cast<EpochTreeInternalNode*>(right.get())->FindLeafNode(epoch);
-    return nullptr;
+  if (IsLeaf()) return nullptr;
+
+  if (epoch <= this->epoch && left) {
+    if (left->IsLeaf()) {
+        auto leftLeaf = static_cast<EpochTreeLeafNode*>(left.get());
+        if (leftLeaf->epoch == epoch) {
+          return leftLeaf;
+        }
+    } else {
+      return static_cast<EpochTreeInternalNode*>(left.get())->FindLeafNode(epoch);
+    }
+  }
+
+  if (epoch > this->epoch && right) {
+    if (right->IsLeaf()) {
+      auto rightLeaf = static_cast<EpochTreeLeafNode*>(right.get());
+      if (rightLeaf->epoch == epoch) {
+        return rightLeaf; 
+      }
+    } else {
+      return static_cast<EpochTreeInternalNode*>(right.get())->FindLeafNode(epoch);
+    }
+  }
+
+  return nullptr;
 }
 
 void EpochTreeInternalNode::InsertLeafNode(std::shared_ptr<EpochTreeLeafNode> node) {
-    if (node->epoch < this->epoch) {
-        if (!left) left = node;
-        else if (left->IsLeaf()) left = std::make_shared<EpochTreeInternalNode>(node->epoch);
-        else static_cast<EpochTreeInternalNode*>(left.get())->InsertLeafNode(node);
-    } else if (node->epoch > this->epoch) {
-        if (!right) right = node;
-        else if (right->IsLeaf()) right = std::make_shared<EpochTreeInternalNode>(node->epoch);
-        else static_cast<EpochTreeInternalNode*>(right.get())->InsertLeafNode(node);
+  if (node->epoch <= this->epoch) {
+    if (!left) {
+      left = node;
+    } else if (left->IsLeaf()) {
+      auto existingLeaf = std::static_pointer_cast<EpochTreeLeafNode>(left);
+      auto newInternal = std::make_shared<EpochTreeInternalNode>(
+        std::min(existingLeaf->epoch, node->epoch));
+
+      if (existingLeaf->epoch <= node->epoch) {
+        newInternal->left = existingLeaf;
+        newInternal->right = node;
+      } else {
+          newInternal->left = node;
+          newInternal->right = existingLeaf;
+      }
+
+      left = newInternal;
+    } else {
+        std::static_pointer_cast<EpochTreeInternalNode>(left)->InsertLeafNode(node);
     }
+  } else if (node->epoch > this->epoch) {
+    if (!right) {
+      right = node;
+    } else if (right->IsLeaf()) {
+      auto existingLeaf = std::static_pointer_cast<EpochTreeLeafNode>(right);
+      auto newInternal = std::make_shared<EpochTreeInternalNode>(existingLeaf->epoch);
+
+      if (existingLeaf->epoch < node->epoch) {
+          newInternal->left = existingLeaf;
+          newInternal->right = node;
+      } else {
+          newInternal->left = node;
+          newInternal->right = existingLeaf;
+      }
+
+      right = newInternal;
+    } else {
+      std::static_pointer_cast<EpochTreeInternalNode>(right)->InsertLeafNode(node);
+    }
+  }
 }
 
 void EpochTreeInternalNode::DeleteLeafNode(eid_t epoch) {
-    if (epoch < this->epoch && left) {
-        if (left->IsLeaf() && static_cast<EpochTreeLeafNode*>(left.get())->epoch == epoch) {
-            left.reset();
-        } else {
-            static_cast<EpochTreeInternalNode*>(left.get())->DeleteLeafNode(epoch);
-        }
-    } else if (epoch > this->epoch && right) {
-        if (right->IsLeaf() && static_cast<EpochTreeLeafNode*>(right.get())->epoch == epoch) {
-            right.reset();
-        } else {
-            static_cast<EpochTreeInternalNode*>(right.get())->DeleteLeafNode(epoch);
-        }
-    }
+	if (epoch <= this->epoch && left) {
+		if (left->IsLeaf()) {
+			auto leftLeaf = static_cast<EpochTreeLeafNode*>(left.get());
+			if (leftLeaf->epoch == epoch) {
+				left.reset();
+			}
+		} else {
+			static_cast<EpochTreeInternalNode*>(left.get())->DeleteLeafNode(epoch);
+			if (!static_cast<EpochTreeInternalNode*>(left.get())->left &&
+					!static_cast<EpochTreeInternalNode*>(left.get())->right) {
+				left.reset();
+			}
+		}
+	} else if (epoch > this->epoch && right) {
+		if (right->IsLeaf()) {
+			auto rightLeaf = static_cast<EpochTreeLeafNode*>(right.get());
+			if (rightLeaf->epoch == epoch) {
+				right.reset();
+			}
+		} else {
+			static_cast<EpochTreeInternalNode*>(right.get())->DeleteLeafNode(epoch);
+
+			if (!static_cast<EpochTreeInternalNode*>(right.get())->left &&
+					!static_cast<EpochTreeInternalNode*>(right.get())->right) {
+				right.reset();
+			}
+		}
+	}
 }
 
 }
