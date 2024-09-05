@@ -415,7 +415,7 @@ void TransactionLevelGCManager::InsertEpochNode(eid_t eid) {
       unlink_tree = std::make_shared<EpochTreeInternalNode>(eid);
       unlink_tree->left = newNode;
   } else {
-      unlink_tree->InsertLeafNode(newNode);
+      unlink_tree->InsertLeafNode(newNode, unlink_tree);
   }
 }
 
@@ -429,7 +429,9 @@ void TransactionLevelGCManager::InsertEpochNode(eid_t eid, concurrency::Transact
             break;
         }
     }
-    if (already_bound) return;
+    if (already_bound) {
+      return;
+    }
 
     exist_node->transactions.push_back(txn_ctx);
     exist_node->IncrementRefCount();
@@ -441,7 +443,7 @@ void TransactionLevelGCManager::InsertEpochNode(eid_t eid, concurrency::Transact
         unlink_tree = std::make_shared<EpochTreeInternalNode>(eid);
         unlink_tree->left = newNode;
     } else {
-        unlink_tree->InsertLeafNode(newNode);
+        unlink_tree->InsertLeafNode(newNode, unlink_tree);
     }
   }
 
@@ -460,7 +462,9 @@ void TransactionLevelGCManager::DeleteEpochNode(eid_t eid) {
 
 void TransactionLevelGCManager::BindTransaction(eid_t eid, concurrency::TransactionContext* txn_ctx) {
   EpochTreeLeafNode* node = FindEpochNode(eid);
-  if(!node) return;
+  if(!node) {
+    return;
+  }
 
   bool already_bound = false;
   for (auto* txn : node->transactions) {
@@ -469,7 +473,9 @@ void TransactionLevelGCManager::BindTransaction(eid_t eid, concurrency::Transact
           break;
       }
   }
-  if (already_bound) return;
+  if (already_bound) {
+    return;
+  }
 
   node->transactions.push_back(txn_ctx);
   node->IncrementRefCount();
@@ -477,8 +483,20 @@ void TransactionLevelGCManager::BindTransaction(eid_t eid, concurrency::Transact
 
 void TransactionLevelGCManager::UnbindTransaction(eid_t eid) {
   EpochTreeLeafNode* node = FindEpochNode(eid);
-  if (node) {
-      node->DecrementRefCount();
+  if (!node) {
+    return;
+  }
+
+  node->DecrementRefCount();
+  if(node->IsGarbage()) {
+    std::shared_ptr<EpochTreeInternalNode> parent = 
+        std::static_pointer_cast<EpochTreeInternalNode>(node->parent);
+    while(parent) {
+      if(parent->has_zero_ref_count)
+        break;
+      parent->has_zero_ref_count = true;
+      parent = std::static_pointer_cast<EpochTreeInternalNode>(parent->parent);
+    }
   }
 }
 

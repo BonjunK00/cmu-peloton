@@ -31,10 +31,12 @@ EpochTreeLeafNode* EpochTreeInternalNode::FindLeafNode(eid_t epoch) {
   return nullptr;
 }
 
-void EpochTreeInternalNode::InsertLeafNode(std::shared_ptr<EpochTreeLeafNode> node) {
+void EpochTreeInternalNode::InsertLeafNode(std::shared_ptr<EpochTreeLeafNode> node,
+		std::shared_ptr<EpochTreeNode> parent_node) {
   if (node->epoch <= this->epoch) {
     if (!left) {
       left = node;
+			node->parent = parent_node;
     } else if (left->IsLeaf()) {
       auto existingLeaf = std::static_pointer_cast<EpochTreeLeafNode>(left);
       auto newInternal = std::make_shared<EpochTreeInternalNode>(
@@ -48,13 +50,17 @@ void EpochTreeInternalNode::InsertLeafNode(std::shared_ptr<EpochTreeLeafNode> no
           newInternal->right = existingLeaf;
       }
 
+			existingLeaf->parent = newInternal;
+    	node->parent = newInternal;
+			newInternal->parent = parent_node;
       left = newInternal;
     } else {
-        std::static_pointer_cast<EpochTreeInternalNode>(left)->InsertLeafNode(node);
+        std::static_pointer_cast<EpochTreeInternalNode>(left)->InsertLeafNode(node, left);
     }
   } else if (node->epoch > this->epoch) {
     if (!right) {
       right = node;
+			node->parent = parent_node;
     } else if (right->IsLeaf()) {
       auto existingLeaf = std::static_pointer_cast<EpochTreeLeafNode>(right);
       auto newInternal = std::make_shared<EpochTreeInternalNode>(existingLeaf->epoch);
@@ -67,9 +73,12 @@ void EpochTreeInternalNode::InsertLeafNode(std::shared_ptr<EpochTreeLeafNode> no
           newInternal->right = existingLeaf;
       }
 
+			existingLeaf->parent = newInternal;
+			node->parent = newInternal;
+			newInternal->parent = parent_node;
       right = newInternal;
     } else {
-      std::static_pointer_cast<EpochTreeInternalNode>(right)->InsertLeafNode(node);
+      std::static_pointer_cast<EpochTreeInternalNode>(right)->InsertLeafNode(node, right);
     }
   }
 }
