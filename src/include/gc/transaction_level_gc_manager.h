@@ -126,7 +126,7 @@ class TransactionLevelGCManager : public GCManager {
 
   virtual size_t GetTableCount() override { return recycle_queue_map_.size(); }
 
-  int Unlink(const int &thread_id, const eid_t &expired_eid);
+  int Unlink(const int &thread_id);
 
   int Reclaim(const int &thread_id, const eid_t &expired_eid);
 
@@ -163,6 +163,9 @@ class TransactionLevelGCManager : public GCManager {
 
   // this function unlinks a specified version from the index.
   void UnlinkVersion(const ItemPointer location, const GCVersionType type);
+
+  void UnlinkEpochNodes(std::shared_ptr<EpochTreeInternalNode> node, 
+    std::vector<concurrency::TransactionContext*>& garbages);
 
  private:
   //===--------------------------------------------------------------------===//

@@ -65,7 +65,7 @@ void TransactionLevelGCManager::Running(const int &thread_id) {
     }
 
     int reclaimed_count = Reclaim(thread_id, expired_eid);
-    int unlinked_count = Unlink(thread_id, expired_eid);
+    int unlinked_count = Unlink(thread_id);
 
     if (is_running_ == false) {
       return;
@@ -99,75 +99,14 @@ void TransactionLevelGCManager::RecycleTransaction(
   unlink_queues_[HashToThread(txn->GetThreadId())]->Enqueue(txn);
 }
 
-int TransactionLevelGCManager::Unlink(const int &thread_id,
-                                      const eid_t &expired_eid) {
+int TransactionLevelGCManager::Unlink(const int &thread_id) {
   int tuple_counter = 0;
 
   // check if any garbage can be unlinked from indexes.
   // every time we garbage collect at most MAX_ATTEMPT_COUNT tuples.
   std::vector<concurrency::TransactionContext *> garbages;
 
-  // First iterate the local unlink queue
-  local_unlink_queues_[thread_id].remove_if(
-      [&garbages, &tuple_counter, expired_eid,
-       this](concurrency::TransactionContext *txn_ctx) -> bool {
-        bool res = txn_ctx->GetEpochId() <= expired_eid;
-        if (res == true) {
-          // unlink versions from version chain and indexes
-          UnlinkVersions(txn_ctx);
-          // Add to the garbage map
-          garbages.push_back(txn_ctx);
-          tuple_counter++;
-        }
-        return res;
-      });
-
-  for (size_t i = 0; i < MAX_ATTEMPT_COUNT; ++i) {
-    concurrency::TransactionContext *txn_ctx;
-    // if there's no more tuples in the queue, then break.
-    if (unlink_queues_[thread_id]->Dequeue(txn_ctx) == false) {
-      break;
-    }
-
-    // Log the query into query_history_catalog
-    if (settings::SettingsManager::GetBool(settings::SettingId::brain)) {
-      std::vector<std::string> query_strings = txn_ctx->GetQueryStrings();
-      if (query_strings.size() != 0) {
-        uint64_t timestamp = txn_ctx->GetTimestamp();
-        auto &pool = threadpool::MonoQueuePool::GetBrainInstance();
-        for (auto query_string : query_strings) {
-          pool.SubmitTask([query_string, timestamp] {
-            brain::QueryLogger::LogQuery(query_string, timestamp);
-          });
-        }
-      }
-    }
-
-    // Deallocate the Transaction Context of transactions that don't involve
-    // any garbage collection
-    if (txn_ctx->IsReadOnly() || \
-        txn_ctx->IsGCSetEmpty()) {
-      delete txn_ctx;
-      continue;
-    }
-
-    if (txn_ctx->GetEpochId() <= expired_eid) {
-      // as the global expired epoch id is no less than the garbage version's
-      // epoch id, it means that no active transactions can read the version. As
-      // a result, we can delete all the tuples from the indexes to which it
-      // belongs.
-
-      // unlink versions from version chain and indexes
-      UnlinkVersions(txn_ctx);
-      // Add to the garbage map
-      garbages.push_back(txn_ctx);
-      tuple_counter++;
-
-    } else {
-      // if a tuple cannot be reclaimed, then add it back to the list.
-      local_unlink_queues_[thread_id].push_back(txn_ctx);
-    }
-  }  // end for
+  UnlinkEpochNodes(unlink_tree, garbages);
 
   // once the current epoch id is expired, then we know all the transactions
   // that are active at this time point will be committed/aborted.
@@ -302,7 +241,7 @@ ItemPointer TransactionLevelGCManager::ReturnFreeSlot(const oid_t &table_id) {
 void TransactionLevelGCManager::ClearGarbage(int thread_id) {
   while (!unlink_queues_[thread_id]->IsEmpty() ||
          !local_unlink_queues_[thread_id].empty()) {
-    Unlink(thread_id, MAX_CID);
+    Unlink(thread_id);
   }
 
   while (reclaim_maps_[thread_id].size() != 0) {
@@ -402,6 +341,81 @@ void TransactionLevelGCManager::UnlinkVersion(const ItemPointer location,
                                 index->GetPool());
 
       index->DeleteEntry(current_key.get(), indirection);
+    }
+  }
+}
+
+void TransactionLevelGCManager::UnlinkEpochNodes(std::shared_ptr<EpochTreeInternalNode> node, 
+    std::vector<concurrency::TransactionContext*>& garbages) {
+  if (!node->has_zero_ref_count) {
+    return;
+  }
+
+  if (node->left) {
+    if (node->left->IsLeaf()) {
+      auto leftLeaf = std::static_pointer_cast<EpochTreeLeafNode>(node->left);
+      if (leftLeaf->IsGarbage()) {
+        for (auto txn_ctx : leftLeaf->transactions) {
+          if (settings::SettingsManager::GetBool(settings::SettingId::brain)) {
+            std::vector<std::string> query_strings = txn_ctx->GetQueryStrings();
+            if (query_strings.size() != 0) {
+              uint64_t timestamp = txn_ctx->GetTimestamp();
+              auto& pool = threadpool::MonoQueuePool::GetBrainInstance();
+              for (auto query_string : query_strings) {
+                pool.SubmitTask([query_string, timestamp] {
+                  brain::QueryLogger::LogQuery(query_string, timestamp);
+                });
+              }
+            }
+          }
+
+          UnlinkVersions(txn_ctx);
+          garbages.push_back(txn_ctx);
+        }
+        node->left.reset();
+      }
+    } else {
+      auto leftInternal = std::static_pointer_cast<EpochTreeInternalNode>(node->left);
+      UnlinkEpochNodes(leftInternal, garbages);
+    }
+  }
+
+  if (node->right) {
+    if (node->right->IsLeaf()) {
+      auto rightLeaf = std::static_pointer_cast<EpochTreeLeafNode>(node->right);
+      if (rightLeaf->IsGarbage()) {
+          for (auto txn_ctx : rightLeaf->transactions) {
+          if (settings::SettingsManager::GetBool(settings::SettingId::brain)) {
+            std::vector<std::string> query_strings = txn_ctx->GetQueryStrings();
+            if (query_strings.size() != 0) {
+              uint64_t timestamp = txn_ctx->GetTimestamp();
+              auto& pool = threadpool::MonoQueuePool::GetBrainInstance();
+              for (auto query_string : query_strings) {
+                pool.SubmitTask([query_string, timestamp] {
+                  brain::QueryLogger::LogQuery(query_string, timestamp);
+                });
+              }
+            }
+          }
+
+          UnlinkVersions(txn_ctx);
+          garbages.push_back(txn_ctx);  // 가비지에 추가
+        }
+        node->right.reset();
+      }
+    } else {
+      auto rightInternal = std::static_pointer_cast<EpochTreeInternalNode>(node->right);
+      UnlinkEpochNodes(rightInternal, garbages);
+    }
+  }
+
+  if (!node->left && !node->right && node->parent) {
+    if (auto parentInternal = std::dynamic_pointer_cast<EpochTreeInternalNode>(node->parent)) {
+      if (parentInternal->left == node) {
+        parentInternal->left.reset();
+      } else if (parentInternal->right == node) {
+        parentInternal->right.reset();
+      }
     }
   }
 }
