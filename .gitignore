@@ -258,6 +258,9 @@ io_file
 # Visual Studio
 .vs
 
+# Visual Studio Code
+.vscode
+
 # QtCreator files
 *.user
 
