@@ -1,41 +1,57 @@
 #pragma once
 
+#include "common/internal_types.h"
+#include "concurrency/transaction_context.h"
+
 namespace peloton {
 namespace gc {
 
-class EpochTreeNode {
+class EpochNode {
   public:
-    virtual ~EpochTreeNode() = default;
+    virtual ~EpochNode() = default;
+    virtual bool IsLeaf() const = 0;
 };
 
-class EpochTreeInternalNode : public EpochTreeNode {
+class EpochInternalNode : public EpochNode {
  public:
-  EpochTreeNode* left;
-  EpochTreeNode* right;
-  EpochTreeInternalNode* parent;
-  int epoch_start;
-  int epoch_end;
+  EpochNode* left;
+  EpochNode* right;
+  EpochInternalNode* parent;
+  eid_t epoch_start;
+  eid_t epoch_end;
 
-  EpochTreeInternalNode(int start, int end) : 
+  EpochInternalNode(eid_t start, eid_t end) : 
       left(nullptr), right(nullptr), parent(nullptr),
       epoch_start(start), epoch_end(end) {}
+  
+  bool IsLeaf() const override {
+    return false;
+  }
 };
 
-class EpochTreeLeafNode : public EpochTreeNode {
+class EpochLeafNode : public EpochNode {
  public:
-  int epoch;
+  eid_t epoch;
   int ref_count;
-  EpochTreeLeafNode* parent;
+  EpochInternalNode* parent;
+  std::vector<concurrency::TransactionContext* > txns;
 
-  EpochTreeLeafNode(int epoch) : epoch(epoch), ref_count(0), parent(nullptr) {}
+  EpochLeafNode(eid_t epoch) : epoch(epoch), ref_count(0), parent(nullptr) {}
+  
+  bool IsLeaf() const override {
+    return true;
+  }
 };
 
 class EpochTree {
  public:
-  EpochTreeNode* root;
-  EpochTreeLeafNode* right_most_leaf;
+  EpochNode* root;
+  EpochLeafNode* right_most_leaf;
 
   EpochTree() : root(nullptr), right_most_leaf(nullptr) {}
+
+  void InsertEpochNode(eid_t epoch);
+
 };
 
 }
