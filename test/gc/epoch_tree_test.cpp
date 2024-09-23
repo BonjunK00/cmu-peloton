@@ -19,13 +19,15 @@ void TraverseAndPrint(gc::EpochNode* node) {
     auto leaf = dynamic_cast<gc::EpochLeafNode*>(node);
     if (leaf) {
       std::cout << "Leaf Node - Epoch: " << leaf->epoch 
-                << ", Ref Count: " << leaf->ref_count << std::endl;
+                << ", Ref Count: " << leaf->ref_count 
+                << ", Size: " << leaf->size << std::endl;
     }
   } else {
     auto internal = dynamic_cast<gc::EpochInternalNode*>(node);
     if (internal) {
       std::cout << "Internal Node - Epoch Range: [" << internal->epoch_start 
-                << ", " << internal->epoch_end << "]" << std::endl;
+                << ", " << internal->epoch_end << "]" 
+                << ", Size: " << internal->size <<  std::endl;
     }
   }
 
@@ -41,10 +43,17 @@ TEST_F(EpochTreeTests, InsertTest) {
   epoch_tree.InsertEpochNode(1);
   epoch_tree.InsertEpochNode(2);
   epoch_tree.InsertEpochNode(3);
+  epoch_tree.InsertEpochNode(4);
+  epoch_tree.InsertEpochNode(5);
+  epoch_tree.InsertEpochNode(6);
+  epoch_tree.InsertEpochNode(7);
+  epoch_tree.InsertEpochNode(8);
+  epoch_tree.InsertEpochNode(9);
+  epoch_tree.InsertEpochNode(10);
 
   TraverseAndPrint(epoch_tree.root);
   
-  EXPECT_EQ(epoch_tree.right_most_leaf->epoch, 3);
+  EXPECT_EQ(epoch_tree.right_most_leaf->epoch, 10);
   EXPECT_EQ(epoch_tree.right_most_leaf->ref_count, 0);
   EXPECT_EQ(epoch_tree.right_most_leaf->txns.size(), 0);
 }
