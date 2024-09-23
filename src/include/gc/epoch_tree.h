@@ -24,8 +24,8 @@ class EpochInternalNode : public EpochNode {
   eid_t epoch_end;
 
   EpochInternalNode(eid_t start, eid_t end) : 
-      left(nullptr), right(nullptr), 
-      epoch_start(start), epoch_end(end), EpochNode(end - start + 1) {}
+      EpochNode(end - start + 1), left(nullptr), right(nullptr), 
+      epoch_start(start), epoch_end(end) {}
   
   bool IsLeaf() const override {
     return false;
@@ -38,7 +38,7 @@ class EpochLeafNode : public EpochNode {
   int ref_count;
   std::vector<concurrency::TransactionContext* > txns;
 
-  EpochLeafNode(eid_t epoch) : epoch(epoch), ref_count(0), EpochNode(1) {}
+  EpochLeafNode(eid_t epoch) : EpochNode(1), epoch(epoch), ref_count(0) {}
   
   bool IsLeaf() const override {
     return true;
