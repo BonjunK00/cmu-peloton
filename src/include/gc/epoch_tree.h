@@ -52,9 +52,9 @@ class EpochTree {
 
   EpochTree() : root(nullptr), right_most_leaf(nullptr) {}
 
-  void InsertEpochNode(eid_t epoch);
-
+  void InsertEpochNode(const eid_t &epoch);
+  EpochLeafNode* FindLeafNode(const eid_t &epoch);
 };
 
-}
-}
+} // namespace gc
+} // namespace peloton

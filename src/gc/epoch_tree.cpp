@@ -3,7 +3,7 @@
 namespace peloton {
 namespace gc {
 
-void EpochTree::InsertEpochNode(eid_t epoch) {
+void EpochTree::InsertEpochNode(const eid_t &epoch) {
   EpochLeafNode* new_leaf = new EpochLeafNode(epoch);
 
   if(root == nullptr) {
@@ -60,5 +60,33 @@ void EpochTree::InsertEpochNode(eid_t epoch) {
   right_most_leaf = new_leaf;
 }
 
+EpochLeafNode* EpochTree::FindLeafNode(const eid_t &epoch) {
+  EpochNode* current = root;
+
+  while (!current->IsLeaf()) {
+    EpochInternalNode* internal = dynamic_cast<EpochInternalNode*>(current);
+
+    if (internal->left->IsLeaf() 
+        && epoch == dynamic_cast<EpochLeafNode*>(internal->left)->epoch) {
+      current = internal->left;
+      break;
+    }
+
+    if (internal->right->IsLeaf() 
+        && epoch == dynamic_cast<EpochLeafNode*>(internal->right)->epoch) {
+      current = internal->right;
+      break;
+    }
+
+    if (epoch <= dynamic_cast<EpochInternalNode*>(internal->left)->epoch_end) {
+      current = internal->left;
+    } else {
+      current = internal->right;
+    }
+  }
+
+  return dynamic_cast<EpochLeafNode*>(current);
 }
-}
+  
+} // namespace gc
+} // namespace peloton
