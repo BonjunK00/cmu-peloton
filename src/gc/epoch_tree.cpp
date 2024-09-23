@@ -49,6 +49,14 @@ void EpochTree::InsertEpochNode(eid_t epoch) {
   new_internal->left = current;
   current->parent = new_internal;
 
+  current = new_internal;
+  while(current->parent != nullptr) {
+    EpochInternalNode* parent = dynamic_cast<EpochInternalNode*>(current->parent);
+    parent->size = parent->left->size + parent->right->size;
+    parent->epoch_end = dynamic_cast<EpochInternalNode*>(parent->right)->epoch_end;
+    current = parent;
+  }
+
   right_most_leaf = new_leaf;
 }
 
