@@ -406,5 +406,35 @@ void TransactionLevelGCManager::UnlinkVersion(const ItemPointer location,
   }
 }
 
+void TransactionLevelGCManager::InsertEpochNode(const eid_t &epoch_id) {
+  epoch_tree_.InsertEpochNode(epoch_id);
+}
+
+void TransactionLevelGCManager::IncrementEpochNodeRefCount(const eid_t &epoch_id) {
+  EpochLeafNode *epoch_node = epoch_tree_.FindLeafNode(epoch_id);
+  if (epoch_node == nullptr) {
+    return;
+  }
+  epoch_node->ref_count++;
+}
+
+void TransactionLevelGCManager::DecrementEpochNodeRefCount(const eid_t &epoch_id) {
+  EpochLeafNode *epoch_node = epoch_tree_.FindLeafNode(epoch_id);
+  if (epoch_node == nullptr) {
+    return;
+  }
+  epoch_node->ref_count--;
+  if (epoch_node->ref_count == 0) {
+  }
+}
+
+void TransactionLevelGCManager::BindEpochNode(const eid_t &epoch_id, concurrency::TransactionContext *txn) {
+  EpochLeafNode *epoch_node = epoch_tree_.FindLeafNode(epoch_id);
+  if (epoch_node == nullptr) {
+    return;
+  }
+  epoch_node->txns.push_back(txn);
+}
+
 }  // namespace gc
 }  // namespace peloton

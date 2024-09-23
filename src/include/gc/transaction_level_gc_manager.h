@@ -23,6 +23,7 @@
 #include "common/thread_pool.h"
 #include "concurrency/transaction_context.h"
 #include "gc/gc_manager.h"
+#include "gc/epoch_tree.h"
 #include "common/internal_types.h"
 
 #include "common/container/lock_free_queue.h"
@@ -129,6 +130,11 @@ class TransactionLevelGCManager : public GCManager {
 
   int Reclaim(const int &thread_id, const eid_t &expired_eid);
 
+  void InsertEpochNode(const eid_t &epoch_id);
+  void IncrementEpochNodeRefCount(const eid_t &epoch_id);
+  void DecrementEpochNodeRefCount(const eid_t &epoch_id);
+  void BindEpochNode(const eid_t &epoch_id, concurrency::TransactionContext *txn);
+
  private:
   inline unsigned int HashToThread(const size_t &thread_id) {
     return (unsigned int)thread_id % gc_thread_count_;
@@ -162,6 +168,8 @@ class TransactionLevelGCManager : public GCManager {
   //===--------------------------------------------------------------------===//
 
   int gc_thread_count_;
+
+  EpochTree epoch_tree_;
 
   // queues for to-be-unlinked tuples.
   // # unlink_queues == # gc_threads
