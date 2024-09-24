@@ -55,6 +55,10 @@ class EpochTree {
   void InsertEpochNode(const eid_t &epoch);
   EpochLeafNode* FindLeafNode(const eid_t &epoch);
   void DeleteEpochNode(EpochNode* node);
+  void PrintEpochTree();
+
+ private:
+  void PrintEpochNode(EpochNode* node);
 };
 
 } // namespace gc

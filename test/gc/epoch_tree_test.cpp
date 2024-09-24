@@ -12,32 +12,6 @@ namespace test {
 
 class EpochTreeTests : public PelotonTest {};
 
-void TraverseAndPrint(gc::EpochNode* node) {
-  if (node == nullptr) return;
-
-  if (node->IsLeaf()) {
-    auto leaf = dynamic_cast<gc::EpochLeafNode*>(node);
-    if (leaf) {
-      std::cout << "Leaf Node - Epoch: " << leaf->epoch 
-                << ", Ref Count: " << leaf->ref_count 
-                << ", Size: " << leaf->size << std::endl;
-    }
-  } else {
-    auto internal = dynamic_cast<gc::EpochInternalNode*>(node);
-    if (internal) {
-      std::cout << "Internal Node - Epoch Range: [" << internal->epoch_start 
-                << ", " << internal->epoch_end << "]" 
-                << ", Size: " << internal->size <<  std::endl;
-    }
-  }
-
-  if (!node->IsLeaf()) {
-    auto internal = dynamic_cast<gc::EpochInternalNode*>(node);
-    TraverseAndPrint(internal->left);
-    TraverseAndPrint(internal->right);
-  }
-}
-
 void DeleteTree(gc::EpochTree* epoch_tree, gc::EpochNode* node) {
   if (node == nullptr) return;
 
@@ -67,7 +41,7 @@ TEST_F(EpochTreeTests, InsertTest) {
   EXPECT_EQ(epoch_tree.right_most_leaf->ref_count, 0);
   EXPECT_EQ(epoch_tree.right_most_leaf->txns.size(), 0);
   
-  TraverseAndPrint(epoch_tree.root);
+  epoch_tree.PrintEpochTree();
 
   DeleteTree(&epoch_tree, epoch_tree.root);
 }

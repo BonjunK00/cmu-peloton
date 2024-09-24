@@ -111,6 +111,36 @@ void EpochTree::DeleteEpochNode(EpochNode* node) {
 
   delete node;
 }
+
+void EpochTree::PrintEpochTree() {
+  PrintEpochNode(root);
+}
+
+void EpochTree::PrintEpochNode(gc::EpochNode* node) {
+  if (node == nullptr) return;
+
+  if (node->IsLeaf()) {
+    auto leaf = dynamic_cast<gc::EpochLeafNode*>(node);
+    if (leaf) {
+      std::cout << "Leaf Node - Epoch: " << leaf->epoch 
+                << ", Ref Count: " << leaf->ref_count 
+                << ", Size: " << leaf->size << std::endl;
+    }
+  } else {
+    auto internal = dynamic_cast<gc::EpochInternalNode*>(node);
+    if (internal) {
+      std::cout << "Internal Node - Epoch Range: [" << internal->epoch_start 
+                << ", " << internal->epoch_end << "]" 
+                << ", Size: " << internal->size <<  std::endl;
+    }
+  }
+
+  if (!node->IsLeaf()) {
+    auto internal = dynamic_cast<gc::EpochInternalNode*>(node);
+    PrintEpochNode(internal->left);
+    PrintEpochNode(internal->right);
+  }
+}
   
 } // namespace gc
 } // namespace peloton
