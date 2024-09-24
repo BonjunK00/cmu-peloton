@@ -34,6 +34,17 @@ namespace gc {
 #define MAX_QUEUE_LENGTH 100000
 #define MAX_ATTEMPT_COUNT 100000
 
+#define GC_GRACE_PERIOD 3000
+
+struct GarbageNode {
+  EpochNode *epoch_node;
+  std::chrono::time_point<std::chrono::steady_clock> insertion_time;
+
+
+  GarbageNode(EpochNode* n) 
+    : epoch_node(n), insertion_time(std::chrono::steady_clock::now()) {}
+};
+
 class TransactionLevelGCManager : public GCManager {
  public:
   TransactionLevelGCManager(const int thread_count)
@@ -135,6 +146,8 @@ class TransactionLevelGCManager : public GCManager {
   void DecrementEpochNodeRefCount(const eid_t &epoch_id);
   void BindEpochNode(const eid_t &epoch_id, concurrency::TransactionContext *txn);
 
+  void InsertGarbage(EpochNode *epoch_node);
+
  private:
   inline unsigned int HashToThread(const size_t &thread_id) {
     return (unsigned int)thread_id % gc_thread_count_;
@@ -170,6 +183,8 @@ class TransactionLevelGCManager : public GCManager {
   int gc_thread_count_;
 
   EpochTree epoch_tree_;
+
+  peloton::LockFreeQueue<GarbageNode> garbage_queue_;
 
   // queues for to-be-unlinked tuples.
   // # unlink_queues == # gc_threads

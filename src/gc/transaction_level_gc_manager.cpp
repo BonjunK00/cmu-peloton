@@ -436,5 +436,9 @@ void TransactionLevelGCManager::BindEpochNode(const eid_t &epoch_id, concurrency
   epoch_node->txns.push_back(txn);
 }
 
+void TransactionLevelGCManager::InsertGarbage(EpochNode *epoch_node) {
+  garbage_queue_.Enqueue(GarbageNode(epoch_node));
+}
+
 }  // namespace gc
 }  // namespace peloton
