@@ -283,6 +283,22 @@ class TransactionContext : public Printable {
   /** cache for table catalog objects */
   catalog::CatalogCache catalog_cache;
 
+  inline bool GetReadFlag() const { 
+    return read_flag_; 
+  }
+
+  inline bool GetWriteFlag() const { 
+    return write_flag_;
+  }
+
+  inline void SetReadFlag(bool flag) { 
+    read_flag_ = flag; 
+  }
+
+  inline void SetWriteFlag(bool flag) { 
+    write_flag_ = flag; 
+  }
+
  private:
   //===--------------------------------------------------------------------===//
   // Data members
@@ -342,6 +358,10 @@ class TransactionContext : public Printable {
 
   /** one default transaction is NOT 'read only' unless it is marked 'read only' explicitly*/
   bool read_only_ = false;
+
+  bool read_flag_ = false;
+  
+  bool write_flag_ = false;
 };
 
 }  // namespace concurrency
