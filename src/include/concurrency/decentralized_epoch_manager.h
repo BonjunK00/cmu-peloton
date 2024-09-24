@@ -24,6 +24,7 @@
 #include "common/synchronization/spin_latch.h"
 #include "concurrency/epoch_manager.h"
 #include "concurrency/local_epoch.h"
+#include "gc/transaction_level_gc_manager.h"
 
 namespace peloton {
 namespace concurrency {
@@ -201,6 +202,7 @@ private:
     PELOTON_ASSERT(is_running_ == true);
 
     while (is_running_ == true) {
+      gc::TransactionLevelGCManager::GetInstance().InsertEpochNode(current_global_epoch_id_);
       // the epoch advances every EPOCH_LENGTH milliseconds.
       std::this_thread::sleep_for(std::chrono::milliseconds(EPOCH_LENGTH));
       current_global_epoch_id_.fetch_add(1);
