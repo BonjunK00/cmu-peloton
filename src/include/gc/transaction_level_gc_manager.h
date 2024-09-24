@@ -146,8 +146,6 @@ class TransactionLevelGCManager : public GCManager {
   void DecrementEpochNodeRefCount(const eid_t &epoch_id);
   void BindEpochNode(const eid_t &epoch_id, concurrency::TransactionContext *txn);
 
-  void InsertGarbage(EpochNode *epoch_node);
-
  private:
   inline unsigned int HashToThread(const size_t &thread_id) {
     return (unsigned int)thread_id % gc_thread_count_;

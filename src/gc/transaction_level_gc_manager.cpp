@@ -424,7 +424,8 @@ void TransactionLevelGCManager::DecrementEpochNodeRefCount(const eid_t &epoch_id
     return;
   }
   epoch_node->ref_count--;
-  if (epoch_node->ref_count == 0) {
+  if (epoch_node->ref_count <= 0) {
+    garbage_queue_.Enqueue(GarbageNode(epoch_node));
   }
 }
 
@@ -434,10 +435,6 @@ void TransactionLevelGCManager::BindEpochNode(const eid_t &epoch_id, concurrency
     return;
   }
   epoch_node->txns.push_back(txn);
-}
-
-void TransactionLevelGCManager::InsertGarbage(EpochNode *epoch_node) {
-  garbage_queue_.Enqueue(GarbageNode(epoch_node));
 }
 
 }  // namespace gc

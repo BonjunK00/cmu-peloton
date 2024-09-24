@@ -791,6 +791,11 @@ ResultType TimestampOrderingTransactionManager::CommitTransaction(
       // no log is needed for this case
     }
   }
+  
+  if(current_txn->GetReadFlag() == true || current_txn->GetWriteFlag() == true) {  
+    auto& transaction_level_gc_manager = gc::TransactionLevelGCManager::GetInstance();
+    transaction_level_gc_manager.DecrementEpochNodeRefCount(current_txn->GetEpochId());
+  }
 
   ResultType result = current_txn->GetResult();
 
