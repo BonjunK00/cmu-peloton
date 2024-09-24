@@ -38,6 +38,18 @@ void TraverseAndPrint(gc::EpochNode* node) {
   }
 }
 
+void DeleteTree(gc::EpochTree* epoch_tree, gc::EpochNode* node) {
+  if (node == nullptr) return;
+
+  if (!node->IsLeaf()) {
+    auto internal = dynamic_cast<gc::EpochInternalNode*>(node);
+    DeleteTree(epoch_tree, internal->left);
+    DeleteTree(epoch_tree, internal->right);
+  }
+
+  epoch_tree->DeleteEpochNode(node);
+}
+
 TEST_F(EpochTreeTests, InsertTest) {
   gc::EpochTree epoch_tree;
   epoch_tree.InsertEpochNode(1);
@@ -51,11 +63,13 @@ TEST_F(EpochTreeTests, InsertTest) {
   epoch_tree.InsertEpochNode(9);
   epoch_tree.InsertEpochNode(10);
 
-  TraverseAndPrint(epoch_tree.root);
-  
   EXPECT_EQ(epoch_tree.right_most_leaf->epoch, 10);
   EXPECT_EQ(epoch_tree.right_most_leaf->ref_count, 0);
   EXPECT_EQ(epoch_tree.right_most_leaf->txns.size(), 0);
+  
+  TraverseAndPrint(epoch_tree.root);
+
+  DeleteTree(&epoch_tree, epoch_tree.root);
 }
 
 }  // namespace test

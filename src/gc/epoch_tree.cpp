@@ -63,7 +63,7 @@ void EpochTree::InsertEpochNode(const eid_t &epoch) {
 EpochLeafNode* EpochTree::FindLeafNode(const eid_t &epoch) {
   EpochNode* current = root;
 
-  while (!current->IsLeaf()) {
+  while (current != nullptr && !current->IsLeaf()) {
     EpochInternalNode* internal = dynamic_cast<EpochInternalNode*>(current);
 
     if (internal->left->IsLeaf() 
@@ -85,7 +85,31 @@ EpochLeafNode* EpochTree::FindLeafNode(const eid_t &epoch) {
     }
   }
 
+  if(current == nullptr || !current->IsLeaf()) {
+    return nullptr;
+  }
+
   return dynamic_cast<EpochLeafNode*>(current);
+}
+
+void EpochTree::DeleteEpochNode(EpochNode* node) {
+  if(node == root) {
+    root = nullptr;
+    right_most_leaf = nullptr;
+    delete node;
+    return;
+  }
+
+  EpochNode* parent = node->parent;
+  EpochInternalNode* internal = dynamic_cast<EpochInternalNode*>(parent);
+
+  if(internal->left == node) {
+    internal->left = nullptr;
+  } else {
+    internal->right = nullptr;
+  }
+
+  delete node;
 }
   
 } // namespace gc
