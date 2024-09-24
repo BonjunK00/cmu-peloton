@@ -113,6 +113,7 @@ void EpochTree::DeleteEpochNode(EpochNode* node) {
 }
 
 void EpochTree::PrintEpochTree() {
+  std::cout << "Epoch Tree:" << std::endl;
   PrintEpochNode(root);
 }
 
