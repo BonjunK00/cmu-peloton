@@ -48,7 +48,8 @@ struct GarbageNode {
 class TransactionLevelGCManager : public GCManager {
  public:
   TransactionLevelGCManager(const int thread_count)
-      : gc_thread_count_(thread_count), reclaim_maps_(thread_count) {
+      : gc_thread_count_(thread_count), reclaim_maps_(thread_count),
+        epoch_tree_(), garbage_queue_(MAX_QUEUE_LENGTH) {
     unlink_queues_.reserve(thread_count);
     for (int i = 0; i < gc_thread_count_; ++i) {
       std::shared_ptr<LockFreeQueue<concurrency::TransactionContext* >>
@@ -180,10 +181,6 @@ class TransactionLevelGCManager : public GCManager {
 
   int gc_thread_count_;
 
-  EpochTree epoch_tree_;
-
-  peloton::LockFreeQueue<GarbageNode> garbage_queue_;
-
   // queues for to-be-unlinked tuples.
   // # unlink_queues == # gc_threads
   std::vector<std::shared_ptr<
@@ -207,6 +204,10 @@ class TransactionLevelGCManager : public GCManager {
   std::unordered_map<oid_t,
                      std::shared_ptr<peloton::LockFreeQueue<ItemPointer>>>
       recycle_queue_map_;
+  
+  EpochTree epoch_tree_;
+
+  peloton::LockFreeQueue<GarbageNode> garbage_queue_;
 };
 }
 }  // namespace peloton
