@@ -34,15 +34,17 @@ namespace gc {
 #define MAX_QUEUE_LENGTH 100000
 #define MAX_ATTEMPT_COUNT 100000
 
-#define GC_GRACE_PERIOD 3000
+#define GRACE_PERIOD 3000
 
 struct GarbageNode {
   EpochNode *epoch_node;
   std::chrono::time_point<std::chrono::steady_clock> insertion_time;
 
-
+  GarbageNode()
+    : epoch_node(nullptr), insertion_time(std::chrono::steady_clock::now()) {}
   GarbageNode(EpochNode* n) 
     : epoch_node(n), insertion_time(std::chrono::steady_clock::now()) {}
+  
 };
 
 class TransactionLevelGCManager : public GCManager {
@@ -138,7 +140,7 @@ class TransactionLevelGCManager : public GCManager {
 
   virtual size_t GetTableCount() override { return recycle_queue_map_.size(); }
 
-  int Unlink(const int &thread_id, const eid_t &expired_eid);
+  int Unlink(const int &thread_id);
 
   int Reclaim(const int &thread_id, const eid_t &expired_eid);
 
