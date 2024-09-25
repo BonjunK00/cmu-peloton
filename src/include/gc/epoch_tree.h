@@ -52,7 +52,7 @@ class EpochTree {
 
   EpochTree() : root(nullptr), right_most_leaf(nullptr) {}
 
-  void InsertEpochNode(const eid_t &epoch);
+  EpochLeafNode* InsertEpochNode(const eid_t &epoch);
   EpochLeafNode* FindLeafNode(const eid_t &epoch);
   void DeleteEpochNode(EpochNode* node);
   void PrintEpochTree();

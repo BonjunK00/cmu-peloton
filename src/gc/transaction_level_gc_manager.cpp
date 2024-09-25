@@ -407,7 +407,8 @@ void TransactionLevelGCManager::UnlinkVersion(const ItemPointer location,
 }
 
 void TransactionLevelGCManager::InsertEpochNode(const eid_t &epoch_id) {
-  epoch_tree_.InsertEpochNode(epoch_id);
+  EpochNode* epoch_node = epoch_tree_.InsertEpochNode(epoch_id);
+  garbage_queue_.Enqueue(GarbageNode(epoch_node));
 }
 
 void TransactionLevelGCManager::IncrementEpochNodeRefCount(const eid_t &epoch_id) {

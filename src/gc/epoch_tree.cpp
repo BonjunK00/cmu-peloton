@@ -3,13 +3,13 @@
 namespace peloton {
 namespace gc {
 
-void EpochTree::InsertEpochNode(const eid_t &epoch) {
+EpochLeafNode* EpochTree::InsertEpochNode(const eid_t &epoch) {
   EpochLeafNode* new_leaf = new EpochLeafNode(epoch);
 
   if(root == nullptr) {
     root = new_leaf;
     right_most_leaf = new_leaf;
-    return;
+    return new_leaf;
   }
 
   EpochNode* current = right_most_leaf;
@@ -41,7 +41,7 @@ void EpochTree::InsertEpochNode(const eid_t &epoch) {
     new_internal->left = current;
     current->parent = new_internal;
     right_most_leaf = new_leaf;
-    return;
+    return new_leaf;
   }
   
   dynamic_cast<EpochInternalNode*>(current->parent)->right = new_internal;
@@ -58,6 +58,7 @@ void EpochTree::InsertEpochNode(const eid_t &epoch) {
   }
 
   right_most_leaf = new_leaf;
+  return new_leaf;
 }
 
 EpochLeafNode* EpochTree::FindLeafNode(const eid_t &epoch) {
