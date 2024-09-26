@@ -44,6 +44,8 @@ struct GarbageNode {
     : epoch_node(nullptr), insertion_time(std::chrono::steady_clock::now()) {}
   GarbageNode(EpochNode* n) 
     : epoch_node(n), insertion_time(std::chrono::steady_clock::now()) {}
+  GarbageNode(EpochNode* n, std::chrono::time_point<std::chrono::steady_clock> t) 
+    : epoch_node(n), insertion_time(t) {}
   
 };
 
@@ -210,6 +212,9 @@ class TransactionLevelGCManager : public GCManager {
   EpochTree epoch_tree_;
 
   peloton::LockFreeQueue<GarbageNode> garbage_queue_;
+
+  std::unordered_map<eid_t, std::chrono::time_point<std::chrono::steady_clock>>
+      epoch_insertion_time_map_;
 };
 }
 }  // namespace peloton

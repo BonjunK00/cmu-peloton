@@ -108,9 +108,14 @@ int TransactionLevelGCManager::Unlink(const int &thread_id) {
   
   GarbageNode current_garbage;
   for (size_t i = 0; i < MAX_ATTEMPT_COUNT; ++i) {
+    if(garbage_queue_.IsEmpty()) {
+      break;
+    }
+
     if(current_garbage.epoch_node == nullptr) {
       garbage_queue_.Dequeue(current_garbage);
     }
+
     auto now = std::chrono::steady_clock::now();
     auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(now - current_garbage.insertion_time);
     auto grace_period = std::chrono::milliseconds(GRACE_PERIOD);
@@ -122,10 +127,15 @@ int TransactionLevelGCManager::Unlink(const int &thread_id) {
     if(current_garbage.epoch_node->IsLeaf()) {
       auto leaf = dynamic_cast<EpochLeafNode*>(current_garbage.epoch_node);
       
-      if(leaf->ref_count > 0) {
-        garbage_queue_.Dequeue(current_garbage);
+      if(leaf->ref_count > 0 
+          || current_garbage.insertion_time != epoch_insertion_time_map_[leaf->epoch]) {
+        if(garbage_queue_.Dequeue(current_garbage) == false) {
+          break;
+        }
         continue;
       }
+
+      epoch_insertion_time_map_.erase(leaf->epoch);
 
       for(auto txn : leaf->txns) {
         UnlinkVersions(txn);
@@ -150,12 +160,15 @@ int TransactionLevelGCManager::Unlink(const int &thread_id) {
     
     EpochInternalNode* parent = dynamic_cast<EpochInternalNode*>(current_garbage.epoch_node->parent);
     epoch_tree_.DeleteEpochNode(current_garbage.epoch_node);
+
     if(parent != nullptr && parent->left == nullptr && parent->right == nullptr) {
       GarbageNode new_garbage(parent);
       garbage_queue_.Enqueue(new_garbage);
     }
 
-    garbage_queue_.Dequeue(current_garbage);
+    if(garbage_queue_.Dequeue(current_garbage) == false) {
+      break;
+    }
   }
 
   // once the current epoch id is expired, then we know all the transactions
@@ -414,7 +427,9 @@ void TransactionLevelGCManager::DecrementEpochNodeRefCount(const eid_t &epoch_id
   }
   epoch_node->ref_count--;
   if (epoch_node->ref_count <= 0) {
-    garbage_queue_.Enqueue(GarbageNode(epoch_node));
+    auto now = std::chrono::steady_clock::now();
+    garbage_queue_.Enqueue(GarbageNode(epoch_node, now));
+    epoch_insertion_time_map_[epoch_id] = now;
   }
 }
 
