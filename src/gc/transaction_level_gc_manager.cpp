@@ -121,6 +121,12 @@ int TransactionLevelGCManager::Unlink(const int &thread_id) {
 
     if(current_garbage.epoch_node->IsLeaf()) {
       auto leaf = dynamic_cast<EpochLeafNode*>(current_garbage.epoch_node);
+      
+      if(leaf->ref_count > 0) {
+        garbage_queue_.Dequeue(current_garbage);
+        continue;
+      }
+
       for(auto txn : leaf->txns) {
         UnlinkVersions(txn);
         garbages.push_back(txn);
@@ -141,9 +147,14 @@ int TransactionLevelGCManager::Unlink(const int &thread_id) {
         }
       }
     }
-    // 연결되어있는지 확인 후 그냥 제거하는거
-    // 상위 노드 확인해서 가비지 큐에 추가로 넣는거
+    
+    EpochInternalNode* parent = dynamic_cast<EpochInternalNode*>(current_garbage.epoch_node->parent);
     epoch_tree_.DeleteEpochNode(current_garbage.epoch_node);
+    if(parent != nullptr && parent->left == nullptr && parent->right == nullptr) {
+      GarbageNode new_garbage(parent);
+      garbage_queue_.Enqueue(new_garbage);
+    }
+
     garbage_queue_.Dequeue(current_garbage);
   }
 
