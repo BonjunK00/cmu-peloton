@@ -54,17 +54,7 @@ void TransactionLevelGCManager::Running(const int &thread_id) {
   PELOTON_ASSERT(is_running_ == true);
   uint32_t backoff_shifts = 0;
   while (true) {
-    auto &epoch_manager = concurrency::EpochManagerFactory::GetInstance();
-
-    auto expired_eid = epoch_manager.GetExpiredEpochId();
-
-    // When the DBMS has started working but it never processes any transaction,
-    // we may see expired_eid == MAX_EID.
-    if (expired_eid == MAX_EID) {
-      continue;
-    }
-
-    int reclaimed_count = Reclaim(thread_id, expired_eid);
+    int reclaimed_count = Reclaim(thread_id);
     int unlinked_count = Unlink(thread_id);
 
     if (is_running_ == false) {
@@ -108,12 +98,14 @@ int TransactionLevelGCManager::Unlink(const int &thread_id) {
   
   GarbageNode current_garbage;
   for (size_t i = 0; i < MAX_ATTEMPT_COUNT; ++i) {
-    if(garbage_queue_.IsEmpty()) {
-      break;
+    while(current_garbage.epoch_node == nullptr) {
+      if(garbage_queue_.Dequeue(current_garbage) == false) {
+        break;
+      };
     }
 
     if(current_garbage.epoch_node == nullptr) {
-      garbage_queue_.Dequeue(current_garbage);
+      break;
     }
 
     auto now = std::chrono::steady_clock::now();
@@ -125,17 +117,17 @@ int TransactionLevelGCManager::Unlink(const int &thread_id) {
     }
 
     if(current_garbage.epoch_node->IsLeaf()) {
-      auto leaf = dynamic_cast<EpochLeafNode*>(current_garbage.epoch_node);
+      auto leaf = dynamic_cast<EpochLeafNode*>(current_garbage.epoch_node);      
       
       if(leaf->ref_count > 0 
-          || current_garbage.insertion_time != epoch_insertion_time_map_[leaf->epoch]) {
+          || current_garbage.insertion_time != epoch_insertion_time_map_[leaf]) {
         if(garbage_queue_.Dequeue(current_garbage) == false) {
           break;
         }
         continue;
       }
 
-      epoch_insertion_time_map_.erase(leaf->epoch);
+      epoch_insertion_time_map_.erase(leaf);
 
       for(auto txn : leaf->txns) {
         UnlinkVersions(txn);
@@ -171,42 +163,25 @@ int TransactionLevelGCManager::Unlink(const int &thread_id) {
     }
   }
 
-  // once the current epoch id is expired, then we know all the transactions
-  // that are active at this time point will be committed/aborted.
-  // at that time point, it is safe to recycle the version.
-  eid_t safe_expired_eid =
-      concurrency::EpochManagerFactory::GetInstance().GetCurrentEpochId();
-
   for (auto &item : garbages) {
-    reclaim_maps_[thread_id].insert(std::make_pair(safe_expired_eid, item));
+    reclaim_maps_[thread_id].insert(item);
   }
   LOG_TRACE("Marked %d tuples as garbage", tuple_counter);
   return tuple_counter;
 }
 
 // executed by a single thread. so no synchronization is required.
-int TransactionLevelGCManager::Reclaim(const int &thread_id,
-                                       const eid_t &expired_eid) {
+int TransactionLevelGCManager::Reclaim(const int &thread_id) {
   int gc_counter = 0;
 
   // we delete garbage in the free list
   auto garbage_ctx_entry = reclaim_maps_[thread_id].begin();
   while (garbage_ctx_entry != reclaim_maps_[thread_id].end()) {
-    const eid_t garbage_eid = garbage_ctx_entry->first;
-    auto txn_ctx = garbage_ctx_entry->second;
+    AddToRecycleMap(*garbage_ctx_entry);
 
-    // if the global expired epoch id is no less than the garbage version's
-    // epoch id, then recycle the garbage version
-    if (garbage_eid <= expired_eid) {
-      AddToRecycleMap(txn_ctx);
-
-      // Remove from the original map
-      garbage_ctx_entry = reclaim_maps_[thread_id].erase(garbage_ctx_entry);
-      gc_counter++;
-    } else {
-      // Early break since we use an ordered map
-      break;
-    }
+    // Remove from the original map
+    garbage_ctx_entry = reclaim_maps_[thread_id].erase(garbage_ctx_entry);
+    gc_counter++;
   }
   LOG_TRACE("Marked %d txn contexts as recycled", gc_counter);
   return gc_counter;
@@ -307,7 +282,7 @@ void TransactionLevelGCManager::ClearGarbage(int thread_id) {
   }
 
   while (reclaim_maps_[thread_id].size() != 0) {
-    Reclaim(thread_id, MAX_CID);
+    Reclaim(thread_id);
   }
 
   return;
@@ -408,8 +383,10 @@ void TransactionLevelGCManager::UnlinkVersion(const ItemPointer location,
 }
 
 void TransactionLevelGCManager::InsertEpochNode(const eid_t &epoch_id) {
-  EpochNode* epoch_node = epoch_tree_.InsertEpochNode(epoch_id);
-  garbage_queue_.Enqueue(GarbageNode(epoch_node));
+  epoch_tree_.InsertEpochNode(epoch_id);
+  // auto now = std::chrono::steady_clock::now();
+  // epoch_insertion_time_map_[epoch_node] = now;
+  // garbage_queue_.Enqueue(GarbageNode(epoch_node, now));
 }
 
 void TransactionLevelGCManager::IncrementEpochNodeRefCount(const eid_t &epoch_id) {
@@ -428,8 +405,8 @@ void TransactionLevelGCManager::DecrementEpochNodeRefCount(const eid_t &epoch_id
   epoch_node->ref_count--;
   if (epoch_node->ref_count <= 0) {
     auto now = std::chrono::steady_clock::now();
+    epoch_insertion_time_map_[epoch_node] = now;
     garbage_queue_.Enqueue(GarbageNode(epoch_node, now));
-    epoch_insertion_time_map_[epoch_id] = now;
   }
 }
 

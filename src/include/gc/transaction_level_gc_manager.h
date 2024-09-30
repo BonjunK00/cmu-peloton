@@ -144,7 +144,7 @@ class TransactionLevelGCManager : public GCManager {
 
   int Unlink(const int &thread_id);
 
-  int Reclaim(const int &thread_id, const eid_t &expired_eid);
+  int Reclaim(const int &thread_id);
 
   void InsertEpochNode(const eid_t &epoch_id);
   void IncrementEpochNodeRefCount(const eid_t &epoch_id);
@@ -200,7 +200,7 @@ class TransactionLevelGCManager : public GCManager {
   // The key is the timestamp when the garbage is identified, value is the
   // metadata of the garbage.
   // # reclaim_maps == # gc_threads
-  std::vector<std::multimap<cid_t, concurrency::TransactionContext* >>
+  std::vector<std::set<concurrency::TransactionContext* >>
       reclaim_maps_;
 
   // queues for to-be-reused tuples.
@@ -213,7 +213,7 @@ class TransactionLevelGCManager : public GCManager {
 
   peloton::LockFreeQueue<GarbageNode> garbage_queue_;
 
-  std::unordered_map<eid_t, std::chrono::time_point<std::chrono::steady_clock>>
+  std::unordered_map<EpochNode* , std::chrono::time_point<std::chrono::steady_clock>>
       epoch_insertion_time_map_;
 };
 }
