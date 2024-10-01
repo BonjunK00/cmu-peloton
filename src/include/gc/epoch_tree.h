@@ -1,10 +1,13 @@
 #pragma once
 
 #include "common/internal_types.h"
+#include "common/container/lock_free_queue.h"
 #include "concurrency/transaction_context.h"
 
 namespace peloton {
 namespace gc {
+
+#define MAX_TXN_COUNT 10000
 
 class EpochNode {
   public:
@@ -35,10 +38,10 @@ class EpochInternalNode : public EpochNode {
 class EpochLeafNode : public EpochNode {
  public:
   eid_t epoch;
-  int ref_count;
-  std::vector<concurrency::TransactionContext* > txns;
+  std::atomic<int> ref_count;
+  peloton::LockFreeQueue<concurrency::TransactionContext* > txns;
 
-  EpochLeafNode(eid_t epoch) : EpochNode(1), epoch(epoch), ref_count(0) {}
+  EpochLeafNode(eid_t epoch) : EpochNode(1), epoch(epoch), ref_count(0), txns(MAX_TXN_COUNT) {}
   
   bool IsLeaf() const override {
     return true;
@@ -47,8 +50,8 @@ class EpochLeafNode : public EpochNode {
 
 class EpochTree {
  public:
-  EpochNode* root;
-  EpochLeafNode* right_most_leaf;
+  std::atomic<EpochNode* > root;
+  std::atomic<EpochLeafNode* > right_most_leaf;
 
   EpochTree() : root(nullptr), right_most_leaf(nullptr) {}
 

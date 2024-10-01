@@ -129,7 +129,10 @@ int TransactionLevelGCManager::Unlink(const int &thread_id) {
 
       epoch_insertion_time_map_.erase(leaf);
 
-      for(auto txn : leaf->txns) {
+      while(leaf->txns.IsEmpty() == false) {
+        concurrency::TransactionContext* txn = nullptr;
+        leaf->txns.Dequeue(txn);
+        
         UnlinkVersions(txn);
         garbages.push_back(txn);
         tuple_counter++;
@@ -415,7 +418,7 @@ void TransactionLevelGCManager::BindEpochNode(const eid_t &epoch_id, concurrency
   if (epoch_node == nullptr) {
     return;
   }
-  epoch_node->txns.push_back(txn);
+  epoch_node->txns.Enqueue(txn);
 }
 
 }  // namespace gc

@@ -64,33 +64,39 @@ EpochLeafNode* EpochTree::InsertEpochNode(const eid_t &epoch) {
 EpochLeafNode* EpochTree::FindLeafNode(const eid_t &epoch) {
   EpochNode* current = root;
 
-  while (current != nullptr && !current->IsLeaf()) {
-    EpochInternalNode* internal = dynamic_cast<EpochInternalNode*>(current);
-
-    if (internal->left->IsLeaf() 
-        && epoch == dynamic_cast<EpochLeafNode*>(internal->left)->epoch) {
-      current = internal->left;
+  while (current != nullptr) {
+    if (current->IsLeaf()) {
+      auto leaf = dynamic_cast<EpochLeafNode*>(current);
+      if (leaf != nullptr && leaf->epoch == epoch) {
+        return leaf;
+      }
       break;
     }
 
-    if (internal->right->IsLeaf() 
-        && epoch == dynamic_cast<EpochLeafNode*>(internal->right)->epoch) {
-      current = internal->right;
+    auto internal = dynamic_cast<EpochInternalNode*>(current);
+    if (internal == nullptr) {
       break;
     }
 
-    if (epoch <= dynamic_cast<EpochInternalNode*>(internal->left)->epoch_end) {
-      current = internal->left;
-    } else {
-      current = internal->right;
+    if (internal->left != nullptr) {
+      if (internal->left->IsLeaf()) {
+        auto left_leaf = dynamic_cast<EpochLeafNode*>(internal->left);
+        if (left_leaf != nullptr && epoch == left_leaf->epoch) {
+          return left_leaf;
+        }
+      } else {
+        auto left_internal = dynamic_cast<EpochInternalNode*>(internal->left);
+        if (left_internal != nullptr && epoch <= left_internal->epoch_end) {
+          current = internal->left;
+          continue;
+        }
+      }
     }
+
+    current = internal->right;
   }
 
-  if(current == nullptr || !current->IsLeaf()) {
-    return nullptr;
-  }
-
-  return dynamic_cast<EpochLeafNode*>(current);
+  return nullptr;
 }
 
 void EpochTree::DeleteEpochNode(EpochNode* node) {
