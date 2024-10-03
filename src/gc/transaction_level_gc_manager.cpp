@@ -116,11 +116,18 @@ int TransactionLevelGCManager::Unlink(const int &thread_id) {
       continue;
     }
 
+    if(epoch_insertion_time_map_.find(current_garbage.epoch_node) == epoch_insertion_time_map_.end()
+        || current_garbage.insertion_time != epoch_insertion_time_map_[current_garbage.epoch_node]) {
+      if(garbage_queue_.Dequeue(current_garbage) == false) {
+        break;
+      }
+      continue;
+    }
+
     if(current_garbage.epoch_node->IsLeaf()) {
-      auto leaf = dynamic_cast<EpochLeafNode*>(current_garbage.epoch_node);      
+      auto leaf = dynamic_cast<EpochLeafNode*>(current_garbage.epoch_node);
       
-      if(leaf->ref_count > 0 
-          || current_garbage.insertion_time != epoch_insertion_time_map_[leaf]) {
+      if(leaf->ref_count > 0) {
         if(garbage_queue_.Dequeue(current_garbage) == false) {
           break;
         }
@@ -386,10 +393,13 @@ void TransactionLevelGCManager::UnlinkVersion(const ItemPointer location,
 }
 
 void TransactionLevelGCManager::InsertEpochNode(const eid_t &epoch_id) {
-  epoch_tree_.InsertEpochNode(epoch_id);
-  // auto now = std::chrono::steady_clock::now();
-  // epoch_insertion_time_map_[epoch_node] = now;
-  // garbage_queue_.Enqueue(GarbageNode(epoch_node, now));
+  EpochLeafNode *epoch_node = epoch_tree_.InsertEpochNode(epoch_id);
+  if (epoch_node == nullptr) {
+    return;
+  }
+  auto now = std::chrono::steady_clock::now();
+  epoch_insertion_time_map_[epoch_node] = now;
+  garbage_queue_.Enqueue(GarbageNode(epoch_node, now));
 }
 
 void TransactionLevelGCManager::IncrementEpochNodeRefCount(const eid_t &epoch_id) {
