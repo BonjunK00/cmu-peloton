@@ -134,8 +134,6 @@ int TransactionLevelGCManager::Unlink(const int &thread_id) {
         continue;
       }
 
-      epoch_insertion_time_map_.erase(leaf);
-
       while(leaf->txns.IsEmpty() == false) {
         concurrency::TransactionContext* txn = nullptr;
         leaf->txns.Dequeue(txn);
@@ -162,9 +160,11 @@ int TransactionLevelGCManager::Unlink(const int &thread_id) {
     
     EpochInternalNode* parent = dynamic_cast<EpochInternalNode*>(current_garbage.epoch_node->parent);
     epoch_tree_.DeleteEpochNode(current_garbage.epoch_node);
+    epoch_insertion_time_map_.erase(current_garbage.epoch_node);
 
     if(parent != nullptr && parent->left == nullptr && parent->right == nullptr) {
       GarbageNode new_garbage(parent);
+      epoch_insertion_time_map_[parent] = now;
       garbage_queue_.Enqueue(new_garbage);
     }
 
