@@ -382,10 +382,11 @@ void TimestampOrderingTransactionManager::PerformInsert(
 
   if(current_txn->GetWriteFlag() == false) {
     auto& transaction_level_gc_manager = gc::TransactionLevelGCManager::GetInstance();
+    auto epoch_node = transaction_level_gc_manager.GetEpochNode(current_txn->GetEpochId());
     if(current_txn->GetReadFlag() == false) {
-      transaction_level_gc_manager.IncrementEpochNodeRefCount(current_txn->GetEpochId());
+      transaction_level_gc_manager.IncrementEpochNodeRefCount(epoch_node);
     }
-    transaction_level_gc_manager.BindEpochNode(current_txn->GetEpochId(), current_txn);
+    transaction_level_gc_manager.BindEpochNode(epoch_node, current_txn);
     current_txn->SetWriteFlag(true);
   }
 }
@@ -470,10 +471,11 @@ void TimestampOrderingTransactionManager::PerformUpdate(
 
   if(current_txn->GetWriteFlag() == false) {
     auto& transaction_level_gc_manager = gc::TransactionLevelGCManager::GetInstance();
+    auto epoch_node = transaction_level_gc_manager.GetEpochNode(current_txn->GetEpochId());
     if(current_txn->GetReadFlag() == false) {
-      transaction_level_gc_manager.IncrementEpochNodeRefCount(current_txn->GetEpochId());
+      transaction_level_gc_manager.IncrementEpochNodeRefCount(epoch_node);
     }
-    transaction_level_gc_manager.BindEpochNode(current_txn->GetEpochId(), current_txn);
+    transaction_level_gc_manager.BindEpochNode(epoch_node, current_txn);
     current_txn->SetWriteFlag(true);
   }
 }
@@ -588,10 +590,11 @@ void TimestampOrderingTransactionManager::PerformDelete(
 
   if(current_txn->GetWriteFlag() == false) {
     auto& transaction_level_gc_manager = gc::TransactionLevelGCManager::GetInstance();
+    auto epoch_node = transaction_level_gc_manager.GetEpochNode(current_txn->GetEpochId());
     if(current_txn->GetReadFlag() == false) {
-      transaction_level_gc_manager.IncrementEpochNodeRefCount(current_txn->GetEpochId());
+      transaction_level_gc_manager.IncrementEpochNodeRefCount(epoch_node);
     }
-    transaction_level_gc_manager.BindEpochNode(current_txn->GetEpochId(), current_txn);
+    transaction_level_gc_manager.BindEpochNode(epoch_node, current_txn);
     current_txn->SetWriteFlag(true);
   }
 }

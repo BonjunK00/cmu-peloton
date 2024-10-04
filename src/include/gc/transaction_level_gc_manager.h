@@ -146,10 +146,13 @@ class TransactionLevelGCManager : public GCManager {
 
   int Reclaim(const int &thread_id);
 
+  EpochLeafNode* GetEpochNode(const eid_t &epoch_id);
   void InsertEpochNode(const eid_t &epoch_id);
   void IncrementEpochNodeRefCount(const eid_t &epoch_id);
+  void IncrementEpochNodeRefCount(EpochLeafNode *epoch_node);
   void DecrementEpochNodeRefCount(const eid_t &epoch_id);
   void BindEpochNode(const eid_t &epoch_id, concurrency::TransactionContext *txn);
+  void BindEpochNode(EpochLeafNode *epoch_node, concurrency::TransactionContext *txn);
 
  private:
   inline unsigned int HashToThread(const size_t &thread_id) {
