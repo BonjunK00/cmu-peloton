@@ -54,18 +54,8 @@ void TransactionLevelGCManager::Running(const int &thread_id) {
   PELOTON_ASSERT(is_running_ == true);
   uint32_t backoff_shifts = 0;
   while (true) {
-    auto &epoch_manager = concurrency::EpochManagerFactory::GetInstance();
-
-    auto expired_eid = epoch_manager.GetExpiredEpochId();
-
-    // When the DBMS has started working but it never processes any transaction,
-    // we may see expired_eid == MAX_EID.
-    if (expired_eid == MAX_EID) {
-      continue;
-    }
-
-    int reclaimed_count = Reclaim(thread_id, expired_eid);
-    int unlinked_count = Unlink(thread_id, expired_eid);
+    int reclaimed_count = Reclaim(thread_id);
+    int unlinked_count = Unlink(thread_id);
 
     if (is_running_ == false) {
       return;
@@ -99,112 +89,109 @@ void TransactionLevelGCManager::RecycleTransaction(
   unlink_queues_[HashToThread(txn->GetThreadId())]->Enqueue(txn);
 }
 
-int TransactionLevelGCManager::Unlink(const int &thread_id,
-                                      const eid_t &expired_eid) {
+int TransactionLevelGCManager::Unlink(const int &thread_id) {
   int tuple_counter = 0;
 
   // check if any garbage can be unlinked from indexes.
   // every time we garbage collect at most MAX_ATTEMPT_COUNT tuples.
   std::vector<concurrency::TransactionContext *> garbages;
-
-  // First iterate the local unlink queue
-  local_unlink_queues_[thread_id].remove_if(
-      [&garbages, &tuple_counter, expired_eid,
-       this](concurrency::TransactionContext *txn_ctx) -> bool {
-        bool res = txn_ctx->GetEpochId() <= expired_eid;
-        if (res == true) {
-          // unlink versions from version chain and indexes
-          UnlinkVersions(txn_ctx);
-          // Add to the garbage map
-          garbages.push_back(txn_ctx);
-          tuple_counter++;
-        }
-        return res;
-      });
-
+  
+  GarbageNode current_garbage;
   for (size_t i = 0; i < MAX_ATTEMPT_COUNT; ++i) {
-    concurrency::TransactionContext *txn_ctx;
-    // if there's no more tuples in the queue, then break.
-    if (unlink_queues_[thread_id]->Dequeue(txn_ctx) == false) {
+    while(current_garbage.epoch_node == nullptr) {
+      if(garbage_queue_.Dequeue(current_garbage) == false) {
+        break;
+      };
+    }
+
+    if(current_garbage.epoch_node == nullptr) {
       break;
     }
 
-    // Log the query into query_history_catalog
-    if (settings::SettingsManager::GetBool(settings::SettingId::brain)) {
-      std::vector<std::string> query_strings = txn_ctx->GetQueryStrings();
-      if (query_strings.size() != 0) {
-        uint64_t timestamp = txn_ctx->GetTimestamp();
-        auto &pool = threadpool::MonoQueuePool::GetBrainInstance();
-        for (auto query_string : query_strings) {
-          pool.SubmitTask([query_string, timestamp] {
-            brain::QueryLogger::LogQuery(query_string, timestamp);
-          });
-        }
-      }
-    }
+    auto now = std::chrono::steady_clock::now();
+    auto duration = std::chrono::duration_cast<std::chrono::milliseconds>(now - current_garbage.insertion_time);
+    auto grace_period = std::chrono::milliseconds(GRACE_PERIOD);
 
-    // Deallocate the Transaction Context of transactions that don't involve
-    // any garbage collection
-    if (txn_ctx->IsReadOnly() || \
-        txn_ctx->IsGCSetEmpty()) {
-      delete txn_ctx;
+    if (duration < grace_period) {
       continue;
     }
 
-    if (txn_ctx->GetEpochId() <= expired_eid) {
-      // as the global expired epoch id is no less than the garbage version's
-      // epoch id, it means that no active transactions can read the version. As
-      // a result, we can delete all the tuples from the indexes to which it
-      // belongs.
-
-      // unlink versions from version chain and indexes
-      UnlinkVersions(txn_ctx);
-      // Add to the garbage map
-      garbages.push_back(txn_ctx);
-      tuple_counter++;
-
-    } else {
-      // if a tuple cannot be reclaimed, then add it back to the list.
-      local_unlink_queues_[thread_id].push_back(txn_ctx);
+    if(epoch_insertion_time_map_.find(current_garbage.epoch_node) == epoch_insertion_time_map_.end()
+        || current_garbage.insertion_time != epoch_insertion_time_map_[current_garbage.epoch_node]) {
+      if(garbage_queue_.Dequeue(current_garbage) == false) {
+        break;
+      }
+      continue;
     }
-  }  // end for
 
-  // once the current epoch id is expired, then we know all the transactions
-  // that are active at this time point will be committed/aborted.
-  // at that time point, it is safe to recycle the version.
-  eid_t safe_expired_eid =
-      concurrency::EpochManagerFactory::GetInstance().GetCurrentEpochId();
+    if(current_garbage.epoch_node->IsLeaf()) {
+      auto leaf = dynamic_cast<EpochLeafNode*>(current_garbage.epoch_node);
+      
+      if(leaf->ref_count > 0) {
+        if(garbage_queue_.Dequeue(current_garbage) == false) {
+          break;
+        }
+        continue;
+      }
+
+      while(leaf->txns.IsEmpty() == false) {
+        concurrency::TransactionContext* txn = nullptr;
+        leaf->txns.Dequeue(txn);
+        
+        UnlinkVersions(txn);
+        garbages.push_back(txn);
+        tuple_counter++;
+
+        // Log the query into query_history_catalog
+        if (settings::SettingsManager::GetBool(settings::SettingId::brain)) {
+          std::vector<std::string> query_strings = txn->GetQueryStrings();
+          if (query_strings.size() != 0) {
+            uint64_t timestamp = txn->GetTimestamp();
+            auto &pool = threadpool::MonoQueuePool::GetBrainInstance();
+            for (auto query_string : query_strings) {
+              pool.SubmitTask([query_string, timestamp] {
+                brain::QueryLogger::LogQuery(query_string, timestamp);
+              });
+            }
+          }
+        }
+      }
+    }
+    
+    EpochInternalNode* parent = dynamic_cast<EpochInternalNode*>(current_garbage.epoch_node->parent);
+    epoch_tree_.DeleteEpochNode(current_garbage.epoch_node);
+    epoch_insertion_time_map_.erase(current_garbage.epoch_node);
+
+    if(parent != nullptr && parent->left == nullptr && parent->right == nullptr) {
+      GarbageNode new_garbage(parent);
+      epoch_insertion_time_map_[parent] = now;
+      garbage_queue_.Enqueue(new_garbage);
+    }
+
+    if(garbage_queue_.Dequeue(current_garbage) == false) {
+      break;
+    }
+  }
 
   for (auto &item : garbages) {
-    reclaim_maps_[thread_id].insert(std::make_pair(safe_expired_eid, item));
+    reclaim_maps_[thread_id].insert(item);
   }
   LOG_TRACE("Marked %d tuples as garbage", tuple_counter);
   return tuple_counter;
 }
 
 // executed by a single thread. so no synchronization is required.
-int TransactionLevelGCManager::Reclaim(const int &thread_id,
-                                       const eid_t &expired_eid) {
+int TransactionLevelGCManager::Reclaim(const int &thread_id) {
   int gc_counter = 0;
 
   // we delete garbage in the free list
   auto garbage_ctx_entry = reclaim_maps_[thread_id].begin();
   while (garbage_ctx_entry != reclaim_maps_[thread_id].end()) {
-    const eid_t garbage_eid = garbage_ctx_entry->first;
-    auto txn_ctx = garbage_ctx_entry->second;
+    AddToRecycleMap(*garbage_ctx_entry);
 
-    // if the global expired epoch id is no less than the garbage version's
-    // epoch id, then recycle the garbage version
-    if (garbage_eid <= expired_eid) {
-      AddToRecycleMap(txn_ctx);
-
-      // Remove from the original map
-      garbage_ctx_entry = reclaim_maps_[thread_id].erase(garbage_ctx_entry);
-      gc_counter++;
-    } else {
-      // Early break since we use an ordered map
-      break;
-    }
+    // Remove from the original map
+    garbage_ctx_entry = reclaim_maps_[thread_id].erase(garbage_ctx_entry);
+    gc_counter++;
   }
   LOG_TRACE("Marked %d txn contexts as recycled", gc_counter);
   return gc_counter;
@@ -300,13 +287,12 @@ ItemPointer TransactionLevelGCManager::ReturnFreeSlot(const oid_t &table_id) {
 }
 
 void TransactionLevelGCManager::ClearGarbage(int thread_id) {
-  while (!unlink_queues_[thread_id]->IsEmpty() ||
-         !local_unlink_queues_[thread_id].empty()) {
-    Unlink(thread_id, MAX_CID);
+  while (!garbage_queue_.IsEmpty()) {
+    Unlink(thread_id);
   }
 
   while (reclaim_maps_[thread_id].size() != 0) {
-    Reclaim(thread_id, MAX_CID);
+    Reclaim(thread_id);
   }
 
   return;
@@ -404,6 +390,63 @@ void TransactionLevelGCManager::UnlinkVersion(const ItemPointer location,
       index->DeleteEntry(current_key.get(), indirection);
     }
   }
+}
+
+EpochLeafNode *TransactionLevelGCManager::GetEpochNode(const eid_t &epoch_id) {
+  return epoch_tree_.FindLeafNode(epoch_id);
+}
+
+void TransactionLevelGCManager::InsertEpochNode(const eid_t &epoch_id) {
+  EpochLeafNode *epoch_node = epoch_tree_.InsertEpochNode(epoch_id);
+  if (epoch_node == nullptr) {
+    return;
+  }
+  auto now = std::chrono::steady_clock::now();
+  epoch_insertion_time_map_[epoch_node] = now;
+  garbage_queue_.Enqueue(GarbageNode(epoch_node, now));
+}
+
+void TransactionLevelGCManager::IncrementEpochNodeRefCount(const eid_t &epoch_id) {
+  EpochLeafNode *epoch_node = epoch_tree_.FindLeafNode(epoch_id);
+  if (epoch_node == nullptr) {
+    return;
+  }
+  epoch_node->ref_count++;
+}
+
+void TransactionLevelGCManager::IncrementEpochNodeRefCount(EpochLeafNode *epoch_node) {
+  if (epoch_node == nullptr) {
+    return;
+  }
+  epoch_node->ref_count++;
+}
+
+void TransactionLevelGCManager::DecrementEpochNodeRefCount(const eid_t &epoch_id) {
+  EpochLeafNode *epoch_node = epoch_tree_.FindLeafNode(epoch_id);
+  if (epoch_node == nullptr) {
+    return;
+  }
+  epoch_node->ref_count--;
+  if (epoch_node->ref_count <= 0) {
+    auto now = std::chrono::steady_clock::now();
+    epoch_insertion_time_map_[epoch_node] = now;
+    garbage_queue_.Enqueue(GarbageNode(epoch_node, now));
+  }
+}
+
+void TransactionLevelGCManager::BindEpochNode(const eid_t &epoch_id, concurrency::TransactionContext *txn) {
+  EpochLeafNode *epoch_node = epoch_tree_.FindLeafNode(epoch_id);
+  if (epoch_node == nullptr) {
+    return;
+  }
+  epoch_node->txns.Enqueue(txn);
+}
+
+void TransactionLevelGCManager::BindEpochNode(EpochLeafNode *epoch_node, concurrency::TransactionContext *txn) {
+  if (epoch_node == nullptr) {
+    return;
+  }
+  epoch_node->txns.Enqueue(txn);
 }
 
 }  // namespace gc

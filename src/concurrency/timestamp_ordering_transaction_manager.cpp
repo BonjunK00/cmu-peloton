@@ -155,6 +155,13 @@ bool TimestampOrderingTransactionManager::PerformRead(TransactionContext *const 
                                                       bool acquire_ownership) {
   ItemPointer location = read_location;
 
+  if(current_txn->GetReadFlag() == false && current_txn->GetWriteFlag() == false) {  
+    auto& transaction_level_gc_manager = gc::TransactionLevelGCManager::GetInstance();
+    transaction_level_gc_manager.IncrementEpochNodeRefCount(current_txn->GetEpochId());
+    current_txn->SetReadFlag(true);
+  }
+
+
   //////////////////////////////////////////////////////////
   //// handle READ_ONLY
   //////////////////////////////////////////////////////////
@@ -372,6 +379,16 @@ void TimestampOrderingTransactionManager::PerformInsert(
 
   auto version_index_manager = VersionIndexManager::GetInstance();
   version_index_manager->AddVersionEntry(index_entry_ptr, ItemPointer(), location);
+
+  if(current_txn->GetWriteFlag() == false) {
+    auto& transaction_level_gc_manager = gc::TransactionLevelGCManager::GetInstance();
+    auto epoch_node = transaction_level_gc_manager.GetEpochNode(current_txn->GetEpochId());
+    if(current_txn->GetReadFlag() == false) {
+      transaction_level_gc_manager.IncrementEpochNodeRefCount(epoch_node);
+    }
+    transaction_level_gc_manager.BindEpochNode(epoch_node, current_txn);
+    current_txn->SetWriteFlag(true);
+  }
 }
 
 void TimestampOrderingTransactionManager::PerformUpdate(
@@ -451,6 +468,16 @@ void TimestampOrderingTransactionManager::PerformUpdate(
 
   auto version_index_manager = VersionIndexManager::GetInstance();
   version_index_manager->AddVersionEntry(index_entry_ptr, old_location, new_location);
+
+  if(current_txn->GetWriteFlag() == false) {
+    auto& transaction_level_gc_manager = gc::TransactionLevelGCManager::GetInstance();
+    auto epoch_node = transaction_level_gc_manager.GetEpochNode(current_txn->GetEpochId());
+    if(current_txn->GetReadFlag() == false) {
+      transaction_level_gc_manager.IncrementEpochNodeRefCount(epoch_node);
+    }
+    transaction_level_gc_manager.BindEpochNode(epoch_node, current_txn);
+    current_txn->SetWriteFlag(true);
+  }
 }
 
 void TimestampOrderingTransactionManager::PerformUpdate(
@@ -560,6 +587,16 @@ void TimestampOrderingTransactionManager::PerformDelete(
 
   auto version_index_manager = VersionIndexManager::GetInstance();
   version_index_manager->AddVersionEntry(index_entry_ptr, old_location, new_location);
+
+  if(current_txn->GetWriteFlag() == false) {
+    auto& transaction_level_gc_manager = gc::TransactionLevelGCManager::GetInstance();
+    auto epoch_node = transaction_level_gc_manager.GetEpochNode(current_txn->GetEpochId());
+    if(current_txn->GetReadFlag() == false) {
+      transaction_level_gc_manager.IncrementEpochNodeRefCount(epoch_node);
+    }
+    transaction_level_gc_manager.BindEpochNode(epoch_node, current_txn);
+    current_txn->SetWriteFlag(true);
+  }
 }
 
 void TimestampOrderingTransactionManager::PerformDelete(
@@ -756,6 +793,11 @@ ResultType TimestampOrderingTransactionManager::CommitTransaction(
 
       // no log is needed for this case
     }
+  }
+  
+  if(current_txn->GetReadFlag() == true || current_txn->GetWriteFlag() == true) {  
+    auto& transaction_level_gc_manager = gc::TransactionLevelGCManager::GetInstance();
+    transaction_level_gc_manager.DecrementEpochNodeRefCount(current_txn->GetEpochId());
   }
 
   ResultType result = current_txn->GetResult();

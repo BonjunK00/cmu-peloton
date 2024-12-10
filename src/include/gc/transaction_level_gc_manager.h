@@ -23,6 +23,7 @@
 #include "common/thread_pool.h"
 #include "concurrency/transaction_context.h"
 #include "gc/gc_manager.h"
+#include "gc/epoch_tree.h"
 #include "common/internal_types.h"
 
 #include "common/container/lock_free_queue.h"
@@ -33,10 +34,26 @@ namespace gc {
 #define MAX_QUEUE_LENGTH 100000
 #define MAX_ATTEMPT_COUNT 100000
 
+#define GRACE_PERIOD 3000
+
+struct GarbageNode {
+  EpochNode *epoch_node;
+  std::chrono::time_point<std::chrono::steady_clock> insertion_time;
+
+  GarbageNode()
+    : epoch_node(nullptr), insertion_time(std::chrono::steady_clock::now()) {}
+  GarbageNode(EpochNode* n) 
+    : epoch_node(n), insertion_time(std::chrono::steady_clock::now()) {}
+  GarbageNode(EpochNode* n, std::chrono::time_point<std::chrono::steady_clock> t) 
+    : epoch_node(n), insertion_time(t) {}
+  
+};
+
 class TransactionLevelGCManager : public GCManager {
  public:
   TransactionLevelGCManager(const int thread_count)
-      : gc_thread_count_(thread_count), reclaim_maps_(thread_count) {
+      : gc_thread_count_(thread_count), reclaim_maps_(thread_count),
+        epoch_tree_(), garbage_queue_(MAX_QUEUE_LENGTH) {
     unlink_queues_.reserve(thread_count);
     for (int i = 0; i < gc_thread_count_; ++i) {
       std::shared_ptr<LockFreeQueue<concurrency::TransactionContext* >>
@@ -125,9 +142,23 @@ class TransactionLevelGCManager : public GCManager {
 
   virtual size_t GetTableCount() override { return recycle_queue_map_.size(); }
 
-  int Unlink(const int &thread_id, const eid_t &expired_eid);
+  int Unlink(const int &thread_id);
 
-  int Reclaim(const int &thread_id, const eid_t &expired_eid);
+  int Reclaim(const int &thread_id);
+
+  EpochLeafNode* GetEpochNode(const eid_t &epoch_id);
+
+  void InsertEpochNode(const eid_t &epoch_id);
+
+  void IncrementEpochNodeRefCount(const eid_t &epoch_id);
+
+  void IncrementEpochNodeRefCount(EpochLeafNode *epoch_node);
+
+  void DecrementEpochNodeRefCount(const eid_t &epoch_id);
+
+  void BindEpochNode(const eid_t &epoch_id, concurrency::TransactionContext *txn);
+  
+  void BindEpochNode(EpochLeafNode *epoch_node, concurrency::TransactionContext *txn);
 
  private:
   inline unsigned int HashToThread(const size_t &thread_id) {
@@ -178,7 +209,7 @@ class TransactionLevelGCManager : public GCManager {
   // The key is the timestamp when the garbage is identified, value is the
   // metadata of the garbage.
   // # reclaim_maps == # gc_threads
-  std::vector<std::multimap<cid_t, concurrency::TransactionContext* >>
+  std::vector<std::set<concurrency::TransactionContext* >>
       reclaim_maps_;
 
   // queues for to-be-reused tuples.
@@ -186,6 +217,13 @@ class TransactionLevelGCManager : public GCManager {
   std::unordered_map<oid_t,
                      std::shared_ptr<peloton::LockFreeQueue<ItemPointer>>>
       recycle_queue_map_;
+  
+  EpochTree epoch_tree_;
+
+  peloton::LockFreeQueue<GarbageNode> garbage_queue_;
+
+  std::unordered_map<EpochNode* , std::chrono::time_point<std::chrono::steady_clock>>
+      epoch_insertion_time_map_;
 };
 }
 }  // namespace peloton
