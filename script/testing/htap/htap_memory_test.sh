@@ -6,9 +6,6 @@ tmux new-session -d -s $SESSION
 tmux send-keys -t $SESSION "./oltp_test.sh" C-m
 
 tmux split-window -h
-tmux send-keys -t $SESSION "./transaction_begin.sh" C-m
-
-tmux split-window -h
 tmux send-keys -t $SESSION "./memory_test.sh" C-m
 
 tmux select-pane -t 0
